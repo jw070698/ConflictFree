@@ -27,7 +27,7 @@ function Login() {
           email: email,
           createdAt: serverTimestamp()
         });
-        console.log("User document created with ID:", docRef.id);  
+        console.log("User created ID:", docRef.id);  
         navigate(`/Input?userDocId=${docRef.id}`);
     } catch (err) {
         console.error("Error creating user:", err);

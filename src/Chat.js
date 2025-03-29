@@ -4,15 +4,15 @@ import { env } from 'process';
 import { ChatFeed, Message } from 'react-chat-ui';
 import { CAlert } from '@coreui/react'
 import { getInputValueAsString } from '@mui/base/unstable_useNumberInput/useNumberInput';
+import { getFirestore, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import app from "./firebase";
 //import OpenAI from "openai";
 //const openai = new OpenAI(apikey:env.OPENAI_API);
 
 function Chat() {
     const [searchParams] = useSearchParams(); 
-    // Information from previous page: Number of people, Relationship, Specific problem users want to solve
-    const PeopleNum = parseInt(searchParams.get("PeopleNum"));
-    const Relationship = searchParams.get("Relationship");
-    const SpecificProblem = searchParams.get("SpecificProblem");
+    const userDocId = searchParams.get("userDocId"); // 로그인 페이지에서 전달된 user 문서 ID
+    console.log("userid:", userDocId)
     /*const prompt = "Let's do a role-play, there is ${PeopleNum} people in ${Relationship} relationship, user want to solve ${SpecificProblem}\
                     You can give me message one by one of number of people in this format.\
                     Person's name or role: speech";
@@ -24,7 +24,7 @@ function Chat() {
     const [alertMessage, setAlertMessage] = useState(""); // Feedback on users' chat 
     const [showQuestionAlert, setShowQuestionAlert] = useState(false); // Alert when clicking ? button
     // Generate many messages as the number of people
-    useEffect(() => {
+    /*useEffect(() => {
         const generatedMessages = [];
         for (let i = 0; i < PeopleNum; i++) {
             generatedMessages.push(
@@ -32,9 +32,9 @@ function Chat() {
             );
         }
         setMessages(generatedMessages);
-    }, [PeopleNum]);
+    }, [PeopleNum]);*/
     // Users' messages
-    const handleSendMessage = () => {
+    /*const handleSendMessage = () => {
         if(inputValue.trim() != ""){
             const newMessage = new Message({
                 id: Messages.length % 2,
@@ -44,9 +44,9 @@ function Chat() {
             setMessages((prevMessages) => [...prevMessages, newMessage]);
             setInputValue("");
         }
-    }
+    }*/
     // Generate feedbacks on users' chat if the sentence includes 'You' and 'Previously'
-    const handleInputChange = (e) => {
+    /*const handleInputChange = (e) => {
         const text = e.target.value;
         setInputValue(e.target.value);
         let alerts = [];
@@ -61,9 +61,9 @@ function Chat() {
             }
         });
         setAlertMessage(alerts.join("\n"));
-    };
+    };*/
     // To be able to send messages by key pressing
-    const handleKeyPress = (e) => {
+    /*const handleKeyPress = (e) => {
         if(e.key === 'Enter'){
             handleSendMessage();
         }
@@ -179,7 +179,7 @@ function Chat() {
                 )}
             </div>
         </div>
-    );
+    );*/
 }
 
 export default Chat;

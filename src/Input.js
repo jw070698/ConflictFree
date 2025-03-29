@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Container, Row, Col, Form, Card, Button, Spinner } from 'react-bootstrap';
 import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
@@ -8,7 +8,7 @@ import { ReactSortable } from 'react-sortablejs';
 import Tesseract from 'tesseract.js';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import app from "./firebase";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, collection, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 const db = getFirestore(app);
 
 function Input() {
@@ -21,6 +21,8 @@ function Input() {
   const [isLoading, setIsLoading] = useState(false);
   const [openAiConversation, setOpenAiConversation] = useState([]);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const userDocId = searchParams.get("userDocId");
   const [identifiedPeople, setIdentifiedPeople] = useState([]);
   const [renamedPeople, setRenamedPeople] = useState({});
   
@@ -127,14 +129,14 @@ function Input() {
 
   const handleStartClick = async () => {
     if (isFormValid()) {
-      await addDoc(collection(db, "users"), {
+      await updateDoc(doc(db, "users", userDocId), {
         relationship: Relationship,
         openAiResults: openAiConversation,
         renamedPeople: renamedPeople,
         conflictDescription: SpecificProblem,
         createdAt: serverTimestamp()
       });
-      navigate(`/Chat?PeopleNum=${PeopleNum}&Relationship=${Relationship}&SpecificProblem=${SpecificProblem}`);
+      navigate(`/chat?userDocId=${userDocId}`);
     } else {
       alert("Please fill out all fields before proceeding.");
     }
