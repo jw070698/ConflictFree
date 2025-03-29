@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Container, Card, Form, Button, Spinner } from 'react-bootstrap';
 import app from "./firebase";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, setDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 const db = getFirestore(app);
 
@@ -22,18 +22,18 @@ function Login() {
     setIsLoggingIn(true);
     setError('');
     try {
-      const docRef = await addDoc(collection(db, "users"), {
-        userId: userId,
-        email: email,
-        createdAt: serverTimestamp()
-      });
-      console.log("User document created with ID:", docRef.id);
-      navigate(`/Input?userDocId=${docRef.id}`);
+        const docRef = doc(db, "users", userId);
+        await setDoc(docRef, {
+          email: email,
+          createdAt: serverTimestamp()
+        });
+        console.log("User document created with ID:", docRef.id);  
+        navigate(`/Input?userDocId=${docRef.id}`);
     } catch (err) {
-      console.error("Error creating user:", err);
-      setError('An error occurred during login.');
+        console.error("Error creating user:", err);
+        setError('An error occurred during login.');
     } finally {
-      setIsLoggingIn(false);
+        setIsLoggingIn(false);
     }
   };
 
