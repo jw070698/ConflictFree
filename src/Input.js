@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Form, Card, Button } from 'react-bootstrap';
+import { Container, Row, Col, Form, Card, Button, Spinner } from 'react-bootstrap';
 import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
 //import NumericInput from 'react-numeric-input';
 import { ReactSortable } from 'react-sortablejs';
 import Tesseract from 'tesseract.js';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import app from "./firebase";
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
+const db = getFirestore(app);
 
 function Input() {
   const [PeopleNum, setPeopleNum] = useState(0);
@@ -15,12 +18,12 @@ function Input() {
   const [SpecificProblem, setSpecificProblem] = useState('');
   const [files, setFiles] = useState([]);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [openAiConversation, setOpenAiConversation] = useState([]);
   const navigate = useNavigate();
-
   const [identifiedPeople, setIdentifiedPeople] = useState([]);
   const [renamedPeople, setRenamedPeople] = useState({});
-
-
+  
   const handleRelationshipSelect = (eventKey) => {
     setRelationship(eventKey);
   };
@@ -61,6 +64,7 @@ function Input() {
   });
 
   const processImagesAndSendToOpenAI = async () => {
+    setIsLoading(true);
     try {
       // OCR (Tesseract.js)
       const texts = await Promise.all(
@@ -112,14 +116,24 @@ function Input() {
       const analysis = data.choices[0].message.content;
       console.log("Result from OpenAI:", analysis);
       const parsed = JSON.parse(analysis.replace(/```json|```/g, '').trim());
+      setOpenAiConversation(parsed);
       setIdentifiedPeople(parsed.map(p => p.Person));
       } catch (error) {
         console.error("Error processing images and sending to OpenAI:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
-  const handleStartClick = () => {
+  const handleStartClick = async () => {
     if (isFormValid()) {
+      await addDoc(collection(db, "users"), {
+        relationship: Relationship,
+        openAiResults: openAiConversation,
+        renamedPeople: renamedPeople,
+        conflictDescription: SpecificProblem,
+        createdAt: serverTimestamp()
+      });
       navigate(`/Chat?PeopleNum=${PeopleNum}&Relationship=${Relationship}&SpecificProblem=${SpecificProblem}`);
     } else {
       alert("Please fill out all fields before proceeding.");
@@ -200,13 +214,20 @@ function Input() {
           </div>
         )}
           <div className="d-flex justify-content-center mt-4">
-            <Button variant="primary" size="sm" onClick={() => {console.log("Images confirmed:", files); setIsConfirmed(true);}} disabled={isConfirmed}
-                    onClick={async ()=> {setIsConfirmed(true); await processImagesAndSendToOpenAI();}} disabled={isConfirmed}>
+            <Button variant="primary" size="sm" onClick={async ()=> {setIsConfirmed(true); await processImagesAndSendToOpenAI();}} disabled={isConfirmed}>
               Confirm Uploads
             </Button>
           </div>
+          {/* Loading */}
+          {isLoading && (
+            <div className="d-flex justify-content-center align-items-center mt-3">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </Spinner>
+            </div>
+          )}
           {/* People Number & Names */}
-          {identifiedPeople.length > 0 && (
+          {!isLoading && identifiedPeople.length > 0 && (
             <Card className="p-3 mt-4">
               <h6>Review Identified Participants</h6>
               <Form.Text className="mb-2 text-muted">
@@ -233,44 +254,6 @@ function Input() {
             </Card>
           )}
       </Form.Group>
-
-        {/* People Number & Names 
-        <Form.Group className="mb-3">
-          <Form.Label>How many people to include?</Form.Label>
-          <NumericInput min={0} value={PeopleNum} onChange={updatePeopleNum} />
-        </Form.Group>
-
-        {Array.from({ length: PeopleNum }).map((_, index) => (
-          <Card key={index} className="p-3 mb-3">
-            <Form.Group className="mb-2">
-              <Form.Label>Person {index + 1} Role or Name</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder={`Person ${index + 1}`}
-                value={names[index]}
-                onChange={(e) => handleNameChange(index, e.target.value)}
-              />
-            </Form.Group>
-
-            <Form.Group>
-              <Form.Label>Upload previous chat with this person</Form.Label>
-              <Form.Control
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleImgChange(index, e)}
-              />
-              {files[index] && (
-                <img
-                  src={files[index]}
-                  alt={`Preview for Person ${index + 1}`}
-                  className="mt-2 rounded"
-                  width="100"
-                />
-              )}
-            </Form.Group>
-          </Card>
-        ))}
-        */}
 
         {/* Conflict Textarea */}
         <Form.Group className="mb-4">
