@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Form, Button } from 'react-bootstrap';
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
@@ -206,17 +207,18 @@ function Chat() {
           showSenderName
         />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Type your message..."
-          style={{ flex: 1, padding: 10, fontSize: 16 }}
-        />
-        <button onClick={handleSendMessage} style={{ padding: 10, marginLeft: 10 }}>
-          Send
-        </button>
+      <div className="d-flex">
+        <Form.Control type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Type your message..." 
+                    onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSendMessage();
+                        }
+                    }}
+                    style={{ fontSize: '1rem', borderRadius: '.25rem' }}/>
+        <Button variant="primary" onClick={handleSendMessage} className="ms-2" style={{ borderRadius: '.25rem', padding: '0.375rem 0.75rem' }}>
+            Send
+        </Button>
       </div>
     </div>
   );
