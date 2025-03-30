@@ -1,185 +1,225 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
-import { env } from 'process';
-import { ChatFeed, Message } from 'react-chat-ui';
-import { CAlert } from '@coreui/react'
-import { getInputValueAsString } from '@mui/base/unstable_useNumberInput/useNumberInput';
-import { getFirestore, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { useSearchParams } from 'react-router-dom';
+import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
-//import OpenAI from "openai";
-//const openai = new OpenAI(apikey:env.OPENAI_API);
+import { ChatFeed, Message } from 'react-chat-ui';
+import { processAllPersonalityAnalyses } from './Analysis';
+
+const db = getFirestore(app);
 
 function Chat() {
     const [searchParams] = useSearchParams(); 
-    const userDocId = searchParams.get("userDocId"); // 로그인 페이지에서 전달된 user 문서 ID
+    const userDocId = searchParams.get("userDocId"); // User ID
     console.log("userid:", userDocId)
-    /*const prompt = "Let's do a role-play, there is ${PeopleNum} people in ${Relationship} relationship, user want to solve ${SpecificProblem}\
-                    You can give me message one by one of number of people in this format.\
-                    Person's name or role: speech";
-    const [messages, setMessages] = useState([
-        { role: "system", content: "You are a role-play expert." },
-        { role: "user", content: prompt, },]);*/
-    const [Messages, setMessages] = useState([]); // Message from API
-    const [inputValue, setInputValue] = useState(""); // Message from users
-    const [alertMessage, setAlertMessage] = useState(""); // Feedback on users' chat 
-    const [showQuestionAlert, setShowQuestionAlert] = useState(false); // Alert when clicking ? button
-    // Generate many messages as the number of people
-    /*useEffect(() => {
-        const generatedMessages = [];
-        for (let i = 0; i < PeopleNum; i++) {
-            generatedMessages.push(
-                new Message({ id: i % 2, senderName: `Person ${i + 1}`, message: `Hi, I am Person ${i + 1}` })
-            );
+
+    const [userData, setUserData] = useState(null);
+    const [conversation, setConversation] = useState([]);
+    const [inputValue, setInputValue] = useState("");
+    const [loadingResponses, setLoadingResponses] = useState(false);
+
+    const senderIdMap = React.useRef({});
+    const nextId = React.useRef(1);
+
+    // Mapping participants name and messages
+    function getParticipantId(senderName) {
+        if (senderIdMap.current[senderName] !== undefined) {
+          return senderIdMap.current[senderName];
         }
-        setMessages(generatedMessages);
-    }, [PeopleNum]);*/
-    // Users' messages
-    /*const handleSendMessage = () => {
-        if(inputValue.trim() != ""){
-            const newMessage = new Message({
-                id: Messages.length % 2,
-                senderName: "Me",
-                message: inputValue,
-            });
-            setMessages((prevMessages) => [...prevMessages, newMessage]);
-            setInputValue("");
+        if (senderName === "Me") {
+          senderIdMap.current[senderName] = 0; // "Me"=0
+        } else {
+          senderIdMap.current[senderName] = nextId.current++;
         }
-    }*/
-    // Generate feedbacks on users' chat if the sentence includes 'You' and 'Previously'
-    /*const handleInputChange = (e) => {
-        const text = e.target.value;
-        setInputValue(e.target.value);
-        let alerts = [];
-        const keywordChecks = [
-            { word: "previously", message: "Focus on present" },
-            { word: "not", message: "Use positive words" },
-            { word: "you", message: "Use 'I' statements to efficient conflict resolution" }
-        ];
-        keywordChecks.forEach(({ word, message }) => {
-            if (text.includes(word)) {
-                alerts.push(message);
+        return senderIdMap.current[senderName];
+      }
+
+    // Data from firebase
+    useEffect(() => {
+        async function fetchUserData() {
+          if (!userDocId) return;
+          const userDocRef = doc(db, "users", userDocId);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserData(data);
+            if (data.chatHistory) {
+              setConversation(data.chatHistory);
             }
+          }
+        }
+        fetchUserData();
+      }, [userDocId]);
+    
+    // Store data into Firebase
+    async function saveMessage(messageObj) {
+        if (!userDocId) return;
+        try {
+        await updateDoc(doc(db, "users", userDocId), {
+            chatHistory: arrayUnion(messageObj),
+            updatedAt: serverTimestamp()
         });
-        setAlertMessage(alerts.join("\n"));
-    };*/
-    // To be able to send messages by key pressing
-    /*const handleKeyPress = (e) => {
-        if(e.key === 'Enter'){
-            handleSendMessage();
+        } catch (err) {
+        console.error("Error saving message to Firebase:", err);
         }
     }
-    const handleQuestionMessage = () => {
-        setShowQuestionAlert(true);
-        setTimeout(() => {
-            setShowQuestionAlert(false);
-        }, 3000);
+
+    // Personality Analysis
+    useEffect(() => {
+        async function runAnalysis() {
+        if (userDocId && userData && userData.openAiResults) {
+            await processAllPersonalityAnalyses(userDocId, userData.openAiResults);
+        }
+        }
+        runAnalysis();
+    }, [userDocId, userData]);
+
+  useEffect(() => {
+    async function generateInitialMessages() {
+      if (!userDocId || !userData || !userData.openAiResults) return;
+      if (conversation.length > 0) return;
+      const participants = userData.openAiResults.filter(item => item.Person !== "Me");
+      setLoadingResponses(true);
+      const conflictDescription = userData?.conflictDescription || "No conflict description provided.";
+      for (let participantObj of participants) {
+        const participant = participantObj.Person;
+        try {
+          // Firestore - Personality analysis
+          const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
+          const systemMessage = `You are ${participant}. Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. Your communication style is: ${personality ? personality.communicationStyle : "Not available"}. You are in a "${conflictDescription}" situation. Respond only with the style of text message.`;
+          const initialPrompt = systemMessage;
+  
+          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-4',
+              messages: [
+                { role: 'system', content: systemMessage },
+                { role: 'user', content: initialPrompt }
+              ]
+            })
+          });
+          const data = await response.json();
+          let aiResponseText = data.choices[0].message.content.trim();
+          const aiMessage = {
+            sender: participant,
+            text: aiResponseText,
+            timestamp: new Date().toISOString()
+          };
+          setConversation(prev => [...prev, aiMessage]);
+          await saveMessage(aiMessage);
+        } catch (error) {
+          console.error(`Error generating initial AI response for ${participant}:`, error);
+        }
+      }
+      setLoadingResponses(false);
+    }
+    generateInitialMessages();
+  }, [userDocId, userData, conversation]);
+  
+
+    // AI responses from participants except "me"
+    async function getAIResponseForParticipant(participant) {
+        const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
+        const conflictDescription = userData?.conflictDescription || "No conflict description provided.";
+        const conversationText = conversation.map(msg => `${msg.sender}: ${msg.text}`).join("\n");
+        const prompt = `You are act as ${participant}. 
+                        Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
+                        Your communication style is: ${personality ? personality.communicationStyle : "Not available"}.
+                        The conflict to resolve is: ${conflictDescription}.
+                        The conversation so far is: ${conversationText}.
+                        Please provide your next message as ${participant} in a natural, conversational tone. Respond only with the message text.`;
+    
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [
+            { role: 'system', content: `You are act as ${participant} with ${personality.personalityTraits} and ${personality.communicationStyle}.` },
+            { role: 'user', content: prompt }
+            ]
+        })
+        });
+        const data = await response.json();
+        const aiMessage = data.choices[0].message.content.trim();
+        return aiMessage;
+    }
+
+  // User's message as "me"
+    const handleSendMessage = async () => {
+        if (inputValue.trim() === "") return;
+        
+        const userMessage = {
+        sender: "Me",
+        text: inputValue,
+        timestamp: new Date().toISOString()
+        };
+        
+        setConversation(prev => [...prev, userMessage]);
+        await saveMessage(userMessage);
+        setInputValue("");
+    
+        if (userData && userData.openAiResults) {
+        const participants = userData.openAiResults.filter(item => item.Person !== "Me");
+        setLoadingResponses(true);
+        for (let participantObj of participants) {
+            const participant = participantObj.Person;
+            try {
+            const aiResponseText = await getAIResponseForParticipant(participant);
+            const aiMessage = {
+                sender: participant,
+                text: aiResponseText,
+                timestamp: new Date().toISOString()
+            };
+            setConversation(prev => [...prev, aiMessage]);
+            await saveMessage(aiMessage);
+            } catch (error) {
+            console.error(`Error generating AI response for ${participant}:`, error);
+            }
+        }
+        setLoadingResponses(false);
+        }
     };
-    return(
-        <div style={{ display: 'flex', justifyContent: 'center', height: '95vh', margin: 10, }}>
-            <div style={{
-                width: '60%', maxWidth: '700px', padding: '20px', borderRadius: '15px',
-                backgroundColor: 'white', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
-                border: '1px solid #ccc',
-            }}>
-                <p>Number of People: {PeopleNum}</p>
-                <p>Relationship Type: {Relationship}</p>
-                <p>Specific problem: {SpecificProblem}</p>
-                <ChatFeed
-                    messages={Messages}
-                    isTyping={false}
-                    hasInputField={false}
-                    showSenderName
-                    bubblesCentered={true}
-                    bubbleStyles={
-                        {text: {fontsize: 70}, chatbubble: {borderRadius: 40, padding: 10}}}
-                />
-                <div style={{ marginTop: 300, position: 'relative'}}>
-                    <div className="input-container" style={{ position: 'relative', width: '100%' }}>
-                        <textarea
-                            value={inputValue}
-                            onChange={handleInputChange}
-                            onKeyPress={handleKeyPress}
-                            placeholder="Type your message..."
-                            style={{ 
-                                width: '100%',
-                                paddingRight: 80,
-                                borderRadius: 20,
-                                border: '1px solid #ccc',
-                                resize: 'none',
-                                minHeight: 20,
-                                maxHeight: 100,
-                                top: 10,
-                                left: 70,
-                                backgroundColor: 'transparent',
-                                color: 'transparent',
-                            }}
-                        />
-                        <div style={{
-                                position: 'absolute',
-                                top: 5,
-                                left: 10,
-                                right: 80,
-                                pointerEvents: 'none',
-                                whiteSpace: 'pre-wrap',
-                                wordWrap: 'break-word'
-                            }}>
-                            {inputValue.split(/(\byou\b|\bpreviously\b|\bnot\b)/gi).map((part, index) => {
-                                const lowerPart = part.toLowerCase();
-                                if (lowerPart === 'you') {
-                                    return <mark key={index} style={{ backgroundColor: 'yellow', padding: 0 }}>{part}</mark>;
-                                }
-                                else if (lowerPart === 'previously') {
-                                    return <mark key={index} style={{ backgroundColor: 'red', color: 'white', padding: 0 }}>{part}</mark>;
-                                }
-                                else if (lowerPart === 'not'){
-                                    return <mark key={index} style={{ backgroundColor: 'purple', color: 'white', padding: 0 }}>{part}</mark>;
-                                }
-                                return part;
-                            })}
-                        </div>
-                        <div style={{ position: 'absolute', bottom: 60, color: 'red', whiteSpace: 'pre-line' }}>{alertMessage}</div>
-                        <button onClick={handleSendMessage}
-                                style={{position: 'absolute',
-                                top: 5.5,
-                                right: 10,
-                                height: '70%',
-                                padding: '0 20px',
-                                borderRadius: 20,
-                                border: 'none',
-                                backgroundColor: '#7BC97B',
-                                color: 'white',
-                                cursor: 'pointer',}}>
-                            Send
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div style={{ position: 'relative', left: 10, top: 640}}>
-                {showQuestionAlert ? (
-                    <CAlert color="warning" style={{ 
-                            padding: '10px 20px',
-                            borderRadius: '20px',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                            margin: 0
-                    }}> 
-                        Take a deep breath for 3 seconds.
-                    </CAlert>) : (
-                    <button 
-                        onClick={handleQuestionMessage}
-                        style={{
-                            padding: '8px 20px',
-                            borderRadius: '20px',
-                            border: 'none',
-                            backgroundColor: '#F5A623',
-                            color: 'white',
-                            cursor: 'pointer'
-                    }}>
-                        ?
-                    </button>
-                )}
-            </div>
-        </div>
-    );*/
+
+  return (
+    <div style={{ padding: 20 }}>
+      <h3>Simulation Chat</h3>
+      <div style={{ marginBottom: 20 }}>
+        <ChatFeed
+          messages={conversation.map(msg => {
+            const uniqueId = getParticipantId(msg.sender);
+            return new Message({
+              id: uniqueId,
+              senderName: msg.sender,
+              message: msg.text
+            });
+          })}
+          isTyping={loadingResponses}
+          hasInputField={false}
+          showSenderName
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder="Type your message..."
+          style={{ flex: 1, padding: 10, fontSize: 16 }}
+        />
+        <button onClick={handleSendMessage} style={{ padding: 10, marginLeft: 10 }}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default Chat;

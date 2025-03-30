@@ -129,10 +129,14 @@ function Input() {
 
   const handleStartClick = async () => {
     if (isFormValid()) {
+      const updatedConversation = openAiConversation.map((participant) => ({
+        ...participant,
+        Person: renamedPeople[participant.Person] ? renamedPeople[participant.Person] : participant.Person,
+      }));
+
       await updateDoc(doc(db, "users", userDocId), {
         relationship: Relationship,
-        openAiResults: openAiConversation,
-        renamedPeople: renamedPeople,
+        openAiResults: updatedConversation,
         conflictDescription: SpecificProblem,
         createdAt: serverTimestamp()
       });
