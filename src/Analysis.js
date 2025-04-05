@@ -4,6 +4,7 @@ import app from "./firebase";
 const db = getFirestore(app);
 
 // Analysis personality of each participant: based on the messages
+// NEED PAPER TO ANALYSIS PERSONALITY
 export async function analyzePersonality(person, messages) {
   const prompt = `Analyze the following messages for the person "${person}": ${messages.join("\n")}
                 Based on these messages, provide a detailed personality analysis that includes the person's communication style, strengths, weaknesses, and overall personality traits.

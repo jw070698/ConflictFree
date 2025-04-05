@@ -71,7 +71,9 @@ function Input() {
       // OCR (Tesseract.js)
       const texts = await Promise.all(
         files.map(async (fileObj) => {
-          const { data: { text } } = await Tesseract.recognize(fileObj.file, 'eng');
+          const { data: { text } } = await Tesseract.recognize(fileObj.file, 'eng', {
+            tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?()[]-_\n ',
+          });
           return text;
         })
       );
@@ -85,18 +87,25 @@ function Input() {
                       - If a participant appears multiple times with the same name or identifier, group all their messages under a single entry.
                       - Make sure to include every message found in the screenshots — do not skip or summarize.
                       Please respond exclusively in the following JSON format without any additional commentary or text:
-                      \n
+                      Extract **every single message** as its own entry, in the **exact order it appeared** in the original chat.  
+                      For each message, include:
+                      - "Person": the name or identifier of the person who sent it. If unknown, use "Me".
+                      - "Message": the exact text of the message.
+                      - "Order": a number representing the chronological order (starting from 1, increasing by 1).
+
                       Output format: 
                       [
                         {
                           "Person": "Me",
-                          "Messages": ["Message", "Message", "Message", ...]
+                          "Message": "Can anyone find the shared word document?",
+                          "Order": 1
                         },
                         {
-                          "Person": "[Name or Identifier]",
-                          "Messages": ["Message", "Message", "Message", ...]
-                        }
-                        // ... more participants if any
+                          "Person": "Y",
+                          "Message": "Yeah we haven't written anything on conclusion and future work.",
+                          "Order": 2
+                        },
+                        ...
                       ]
                       \n
                       Here is the conversation text:
@@ -119,7 +128,8 @@ function Input() {
       console.log("Result from OpenAI:", analysis);
       const parsed = JSON.parse(analysis.replace(/```json|```/g, '').trim());
       setOpenAiConversation(parsed);
-      setIdentifiedPeople(parsed.map(p => p.Person));
+      const uniquePeople = Array.from(new Set(parsed.map(entry => entry.Person)));
+      setIdentifiedPeople(uniquePeople);
       } catch (error) {
         console.error("Error processing images and sending to OpenAI:", error);
       } finally {
@@ -129,14 +139,14 @@ function Input() {
 
   const handleStartClick = async () => {
     if (isFormValid()) {
-      const updatedConversation = openAiConversation.map((participant) => ({
-        ...participant,
-        Person: renamedPeople[participant.Person] ? renamedPeople[participant.Person] : participant.Person,
+      const renamedConversation = openAiConversation.map((entry) => ({
+        ...entry,
+        Person: renamedPeople[entry.Person] || entry.Person
       }));
 
       await updateDoc(doc(db, "users", userDocId), {
         relationship: Relationship,
-        openAiResults: updatedConversation,
+        openAiResults: renamedConversation,
         conflictDescription: SpecificProblem,
         createdAt: serverTimestamp()
       });

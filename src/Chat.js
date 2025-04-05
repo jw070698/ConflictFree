@@ -32,7 +32,7 @@ function Chat() {
           senderIdMap.current[senderName] = nextId.current++;
         }
         return senderIdMap.current[senderName];
-      }
+    }
 
     // Data from firebase
     useEffect(() => {
@@ -43,8 +43,14 @@ function Chat() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             setUserData(data);
-            if (data.chatHistory) {
-              setConversation(data.chatHistory);
+            if (data.openAiResults && Array.isArray(data.openAiResults)) {
+              const sorted = [...data.openAiResults].sort((a, b) => a.Order - b.Order);
+              const formatted = sorted.map(item => ({
+                sender: item.Person,
+                text: item.Message,
+                order: item.Order
+              }));
+              setConversation(formatted);
             }
           }
         }
