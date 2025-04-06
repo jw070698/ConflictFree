@@ -3,6 +3,27 @@ import app from "./firebase";
 
 const db = getFirestore(app);
 
+export function normalizeOpenAiResults(flatResults) {
+  const grouped = {};
+
+  for (const entry of flatResults) {
+    const { Person, Message } = entry;
+    if (!Person || !Message) continue;
+
+    if (!grouped[Person]) {
+      grouped[Person] = [];
+    }
+
+    grouped[Person].push(Message);
+  }
+
+  return Object.entries(grouped).map(([Person, Messages]) => ({
+    Person,
+    Messages
+  }));
+}
+
+
 // Analysis personality of each participant: based on the messages
 // NEED PAPER TO ANALYSIS PERSONALITY
 export async function analyzePersonality(person, messages) {

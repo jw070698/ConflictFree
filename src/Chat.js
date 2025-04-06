@@ -4,7 +4,7 @@ import { Form, Button } from 'react-bootstrap';
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
-import { processAllPersonalityAnalyses } from './Analysis';
+import { normalizeOpenAiResults, processAllPersonalityAnalyses } from './Analysis';
 
 const db = getFirestore(app);
 
@@ -74,7 +74,9 @@ function Chat() {
     useEffect(() => {
         async function runAnalysis() {
         if (userDocId && userData && userData.openAiResults) {
-            await processAllPersonalityAnalyses(userDocId, userData.openAiResults);
+            const normalizedResults = normalizeOpenAiResults(userData.openAiResults);
+            console.log(normalizedResults);
+            await processAllPersonalityAnalyses(userDocId, normalizedResults);
         }
         }
         runAnalysis();

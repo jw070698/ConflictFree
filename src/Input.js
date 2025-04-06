@@ -73,13 +73,13 @@ function Input() {
         files.map(async (fileObj) => {
           const { data: { text } } = await Tesseract.recognize(fileObj.file, 'eng', {
             tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?()[]-_\n ',
+            psm: 6,
           });
-          return text;
-        })
-      );
-      const combinedText = texts.join("\n\n");
-      console.log("Extracted Text:", combinedText);
-
+        return text;
+      })
+    );
+    const combinedText = texts.join("\n\n");
+    console.log("Extracted Text:", combinedText);
       // Prompt: relationship + text ver. of images
       const prompt = `Analyze the following chat conversation extracted from screenshots, which occurred in a "${Relationship}" context.
                       Identify the participants in the conversation and group the messages they each sent.
@@ -89,7 +89,7 @@ function Input() {
                       Please respond exclusively in the following JSON format without any additional commentary or text:
                       Extract **every single message** as its own entry, in the **exact order it appeared** in the original chat.  
                       For each message, include:
-                      - "Person": the name or identifier of the person who sent it. If unknown, use "Me".
+                      - "Person": the name or identifier of the person who sent it. Messages with "Side": "right" are sent by "Me". Messages with "Side": "left" are sent by someone else.
                       - "Message": the exact text of the message.
                       - "Order": a number representing the chronological order (starting from 1, increasing by 1).
 
@@ -123,19 +123,18 @@ function Input() {
           messages: [{ role: 'user', content: prompt }],
         }),
       });
-      const data = await response.json();
-      const analysis = data.choices[0].message.content;
-      console.log("Result from OpenAI:", analysis);
-      const parsed = JSON.parse(analysis.replace(/```json|```/g, '').trim());
-      setOpenAiConversation(parsed);
-      const uniquePeople = Array.from(new Set(parsed.map(entry => entry.Person)));
-      setIdentifiedPeople(uniquePeople);
-      } catch (error) {
-        console.error("Error processing images and sending to OpenAI:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      const result = await response.json();
+      console.log(result.choices[0].message.content);
+    const parsed = JSON.parse(result.choices[0].message.content.replace(/```json|```/g, '').trim());
+    setOpenAiConversation(parsed);
+    const uniquePeople = Array.from(new Set(parsed.map(entry => entry.Person)));
+    setIdentifiedPeople(uniquePeople);
+  } catch (error) {
+    console.error("Error processing images or sending to OpenAI:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleStartClick = async () => {
     if (isFormValid()) {
