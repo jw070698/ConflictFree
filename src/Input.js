@@ -14,7 +14,8 @@ const db = getFirestore(app);
 function Input() {
   const [PeopleNum, setPeopleNum] = useState(0);
   const [names, setNames] = useState(['']);
-  const [Relationship, setRelationship] = useState('');
+  const [Gender, setGender] = useState('');
+  const [PartnerGender, setPartnerGender] = useState('');
   const [SpecificProblem, setSpecificProblem] = useState('');
   const [files, setFiles] = useState([]);
   const [isConfirmed, setIsConfirmed] = useState(false);
@@ -26,8 +27,12 @@ function Input() {
   const [identifiedPeople, setIdentifiedPeople] = useState([]);
   const [renamedPeople, setRenamedPeople] = useState({});
   
-  const handleRelationshipSelect = (eventKey) => {
-    setRelationship(eventKey);
+  const handleGenderSelect = (eventKey) => {
+    setGender(eventKey);
+  };
+
+  const handlePartnerGenderSelect = (eventKey) => {
+    setPartnerGender(eventKey);
   };
 
   const updatePeopleNum = (num) => {
@@ -52,7 +57,7 @@ function Input() {
 
   const isFormValid = () => {
     return (
-      Relationship &&
+      Gender &&
       isConfirmed &&
       SpecificProblem.trim() !== ""
     );
@@ -65,70 +70,111 @@ function Input() {
     reader.onerror = (error) => reject(error);
   });
 
+  {/* OCR & Summary */}
   const processImagesAndSendToOpenAI = async () => {
     setIsLoading(true);
     try {
-      // OCR (Tesseract.js)
-      const texts = await Promise.all(
+      const imageContents = await Promise.all(
         files.map(async (fileObj) => {
-          const { data: { text } } = await Tesseract.recognize(fileObj.file, 'eng', {
-            tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?()[]-_\n ',
-            psm: 6,
+          const file = fileObj.file;
+          const reader = new FileReader();
+          return new Promise((resolve, reject) => {
+            reader.onload = () => {
+              const base64 = reader.result.split(',')[1];
+              resolve({
+                type: "image_url",
+                image_url: {
+                  url: `data:${file.type};base64,${base64}`
+                }
+              });
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
           });
-        return text;
-      })
-    );
-    const combinedText = texts.join("\n\n");
-    console.log("Extracted Text:", combinedText);
-      // Prompt: relationship + text ver. of images
-      const prompt = `Analyze the following chat conversation extracted from screenshots, which occurred in a "${Relationship}" context.
-                      Identify the participants in the conversation and group the messages they each sent.
-                      - If the sender cannot be identified clearly from the context or the image, assume the message was sent by "Me".
-                      - If a participant appears multiple times with the same name or identifier, group all their messages under a single entry.
-                      - Make sure to include every message found in the screenshots — do not skip or summarize.
-                      Please respond exclusively in the following JSON format without any additional commentary or text:
-                      Extract **every single message** as its own entry, in the **exact order it appeared** in the original chat.  
-                      For each message, include:
-                      - "Person": the name or identifier of the person who sent it. Messages with "Side": "right" are sent by "Me". Messages with "Side": "left" are sent by someone else.
-                      - "Message": the exact text of the message.
-                      - "Order": a number representing the chronological order (starting from 1, increasing by 1).
+        })
+      );
+      // Prompt: text ver. of images
+      //- If a participant sends multiple messages in a row with the same name or identifier, group all their messages under a single entry.
+      const introPrompt = {
+        type: "text",
+        text: `You will be shown a series of chat screenshots.
+               Identify the participants in the conversation and group the messages they each sent.
+               - If the sender is on the right side of the screen or if the sender cannot be identified clearly from the context or the image, assume the message was sent by "Me".
+               - Make sure to include every message found in the screenshots (do not skip or summarize).
+               Please respond exclusively in the following JSON format without any additional commentary or text: Extract **every single message** as its own entry, in the **exact order it appeared** in the original chat.  
+               For each message, include:
+               - "Person": the name or identifier of the person who sent it. Messages with "Side": "right" are sent by "Me". Messages with "Side": "left" are sent by someone else.
+               - "Message": the exact text of the message.
+               - "Order": a number representing the chronological order (starting from 1, increasing by 1).
 
-                      Output format: 
-                      [
-                        {
-                          "Person": "Me",
-                          "Message": "Can anyone find the shared word document?",
-                          "Order": 1
-                        },
-                        {
-                          "Person": "Y",
-                          "Message": "Yeah we haven't written anything on conclusion and future work.",
-                          "Order": 2
-                        },
-                        ...
-                      ]
-                      \n
-                      Here is the conversation text:
-                      ${combinedText}`;
+               Output format: 
+               [
+                {
+                  "Person": "Me",
+                  "Message": "Can anyone find the shared word document?",
+                  "Order": 1
+                },
+                {
+                  "Person": "Y",
+                  "Message": "Yeah we haven't written anything on conclusion and future work.",
+                  "Order": 2
+                },
+                ...
+                ]`};
+      
+      const messages = [
+        {
+          role: "user",
+          content: [introPrompt, ...imageContents]
+        }
+      ];
 
       // OpenAI API
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: prompt }],
+          model: "gpt-4o",
+          messages,
+          max_tokens: 4000
         }),
       });
       const result = await response.json();
-      console.log(result.choices[0].message.content);
-    const parsed = JSON.parse(result.choices[0].message.content.replace(/```json|```/g, '').trim());
-    setOpenAiConversation(parsed);
-    const uniquePeople = Array.from(new Set(parsed.map(entry => entry.Person)));
-    setIdentifiedPeople(uniquePeople);
+      const rawOutput = result.choices[0].message.content;
+      const cleaned = rawOutput.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      setOpenAiConversation(parsed);
+      console.log(parsed)
+
+      const uniquePeople = Array.from(new Set(parsed.map(entry => entry.Person)));
+      setIdentifiedPeople(uniquePeople);
+
+    // Summary
+    const summaryPrompt = `
+      Based on the following chat messages, briefly summarize (1-2 sentences) what the core conflict between each participant(${uniquePeople.join(', ')}) seems to be.
+      Messages:
+      ${JSON.stringify(parsed, null, 2)}
+    `;
+    const summaryRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: summaryPrompt }],
+      }),
+    });
+    const summaryJson = await summaryRes.json();
+    const summaryText = summaryJson.choices[0].message.content.trim();
+
+    // textarea
+    setSpecificProblem(summaryText);
+
   } catch (error) {
     console.error("Error processing images or sending to OpenAI:", error);
   } finally {
@@ -144,12 +190,13 @@ function Input() {
       }));
 
       await updateDoc(doc(db, "users", userDocId), {
-        relationship: Relationship,
+        gender: Gender,
+        partnerGender: PartnerGender,
         openAiResults: renamedConversation,
         conflictDescription: SpecificProblem,
         createdAt: serverTimestamp()
       });
-      navigate(`/chat?userDocId=${userDocId}`);
+      navigate(`/analysis?userDocId=${userDocId}`);
     } else {
       alert("Please fill out all fields before proceeding.");
     }
@@ -159,24 +206,6 @@ function Input() {
     <Container fluid style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
         <Card className="p-4 shadow-sm" style={{ width: "100%", maxWidth: "700px" }}>
         <h4 className="mb-4">Simulation Setup</h4>
-
-        {/* Relationship */}
-        <Form.Group as={Row} className="mb-3 align-items-center">
-          <Form.Label column sm={4} >Select a relationship</Form.Label>
-          <Col sm={4} style={{ padding: 0 }}>
-            <DropdownButton
-              id="dropdown-relationship"
-              title={Relationship || "Choose Relationship"}
-              onSelect={handleRelationshipSelect}
-              size="sm"
-              style={{ margin: 0, padding: 0 }}
-            >
-              <Dropdown.Item eventKey="Friendship">Friendship</Dropdown.Item>
-              <Dropdown.Item eventKey="Romantic Relationship">Romantic Relationship</Dropdown.Item>
-              <Dropdown.Item eventKey="Family">Family</Dropdown.Item>
-            </DropdownButton>
-          </Col>
-        </Form.Group>
 
         {/* Upload Screenshots */}
         <Form.Group className="mb-4">
@@ -191,6 +220,7 @@ function Input() {
             setFiles(prevFiles => [...prevFiles, ...fileArray]);
           }}
         />
+
         {/* Sortable & Removable */}
         {!isConfirmed? (
           <ReactSortable className="d-flex flex-wrap gap-2 mt-3" tag="div" list={files} setList={setFiles} >
@@ -276,9 +306,41 @@ function Input() {
           <Form.Control as="textarea" rows={3} value={SpecificProblem} onChange={(e) => setSpecificProblem(e.target.value)}/>
         </Form.Group>
 
+        {/* Gender */}
+        <Form.Group as={Row} className="mb-3 align-items-center">
+          <Form.Label column sm={5}>Tell us a bit about yourself</Form.Label>
+          <Col sm={3} style={{ padding: 0 }}>
+            <DropdownButton
+              id="dropdown-gender"
+              title={Gender || "I identify as..."}
+              onSelect={handleGenderSelect}
+              size="sm"
+            >
+              <Dropdown.Item eventKey="She/Her">She/Her</Dropdown.Item>
+              <Dropdown.Item eventKey="He/Him">He/Him</Dropdown.Item>
+            </DropdownButton>
+          </Col>
+        </Form.Group>
+        
+        <Form.Group as={Row} className="mb-3 align-items-center">
+          <Form.Label column sm={5}>Tell us about your partner</Form.Label>
+          <Col sm={3} style={{ padding: 0 }}>
+            <DropdownButton
+              id="dropdown-partner-gender"
+              title={PartnerGender || "My partner uses..."}
+              onSelect={handlePartnerGenderSelect}
+              size="sm"
+              style={{ margin: 0, padding: 0 }}
+            >
+              <Dropdown.Item eventKey="She/Her">She/Her</Dropdown.Item>
+              <Dropdown.Item eventKey="He/Him">He/Him</Dropdown.Item>
+            </DropdownButton>
+          </Col>
+        </Form.Group>
+
         {/* Start Button */}
         <Button onClick={handleStartClick} disabled={!isFormValid()} variant="primary" className="mt-3 w-100">
-          Let's Start
+          Let's Analyze
         </Button>
       </Card>
     </Container>

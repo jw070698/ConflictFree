@@ -4,6 +4,9 @@ import './index.css';
 import App from './App';
 import Login from './Login';
 import Input from './Input';
+import Analysis from './Analysis';
+import Recommendation from './Recommendation';
+import Game from './Game';
 import Chat from './Chat';
 import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -15,6 +18,9 @@ root.render(
     <Routes>
       <Route path="/" element={<Login/>} />
       <Route path="/Input" element={<Input />} />
+      <Route path="/Analysis" element={<Analysis />} />
+      <Route path="/Recommendation" element={<Recommendation />} />
+      {/*<Route path="/Game" element={<Game />} />*/}
       <Route path="/Chat" element={<Chat />} />
     </Routes>
   </BrowserRouter>
