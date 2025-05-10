@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Container, Card, Row, Col, Spinner, Button } from 'react-bootstrap';
 import app from "./firebase";
+import { analyzeConflictTypes } from "./Type";
 
 const db = getFirestore(app);
 
@@ -60,12 +61,73 @@ function Analysis() {
   const [loading, setLoading] = useState(true);
   const [analyzingPersonality, setAnalyzingPersonality] = useState(false);
   const [localScores, setLocalScores] = useState({});
+  const [gottmanAnalysis, setGottmanAnalysis] = useState(null);
+  const [analyzingGottman, setAnalyzingGottman] = useState(false);
 
   useEffect(() => {
     if (userData?.personalityAnalysis) {
       setLocalScores(userData.personalityAnalysis);
     }
+    
+    // If gottmanAnalysis exists in userData, set it to state
+    if (userData?.gottmanAnalysis) {
+      console.log("Loading existing Gottman analysis:", userData.gottmanAnalysis);
+      setGottmanAnalysis(userData.gottmanAnalysis);
+    }
   }, [userData]);
+
+  useEffect(() => {
+    // Run Gottman analysis when scores are available
+    async function runGottmanAnalysis() {
+      if (Object.keys(localScores).length >= 2 && !analyzingGottman && !gottmanAnalysis) {
+        try {
+          console.log("Starting Gottman analysis with scores:", localScores);
+          setAnalyzingGottman(true);
+          
+          // Use the imported function directly
+          const analysis = analyzeConflictTypes(localScores);
+          console.log("Gottman analysis result:", analysis);
+          
+          if (!analysis) {
+            console.error("Analysis returned null or undefined");
+            setAnalyzingGottman(false);
+            return;
+          }
+          
+          // Save Gottman analysis to state
+          setGottmanAnalysis(analysis);
+          
+          // Save Gottman analysis to Firebase
+          if (userDocId) {
+            const userDocRef = doc(db, "users", userDocId);
+            await updateDoc(userDocRef, {
+              gottmanAnalysis: analysis,
+              updatedAt: serverTimestamp()
+            });
+            console.log("Gottman analysis saved to Firebase");
+          }
+        } catch (error) {
+          console.error("Error analyzing Gottman conflict types:", error);
+        } finally {
+          setAnalyzingGottman(false);
+        }
+      }
+    }
+    
+    runGottmanAnalysis();
+  }, [localScores, analyzingGottman, gottmanAnalysis, userDocId]);
+
+  // Force an immediate analysis if needed
+  const triggerAnalysis = () => {
+    if (Object.keys(localScores).length >= 2) {
+      console.log("Manually triggering Gottman analysis");
+      const analysis = analyzeConflictTypes(localScores);
+      console.log("Manual analysis result:", analysis);
+      setGottmanAnalysis(analysis);
+    } else {
+      console.log("Not enough data to perform analysis");
+    }
+  };
 
   const handleScoreChange = async (person, questionIndex, newValue) => {
     const currentScores = localScores[person]?.scores || Array(CONFLICT_QUESTIONS.length).fill(3);
@@ -112,6 +174,16 @@ function Analysis() {
 
       // Wait for all updates to complete
       await Promise.all(updatePromises);
+      
+      // Save Gottman analysis if available
+      if (gottmanAnalysis) {
+        await updateDoc(userDocRef, {
+          gottmanAnalysis: gottmanAnalysis,
+          updatedAt: serverTimestamp()
+        });
+        console.log("Gottman analysis saved");
+      }
+      
       console.log("All scores saved successfully");
       
       // Navigate to recommendation page
@@ -133,6 +205,11 @@ function Analysis() {
         if (userDoc.exists()) {
           const data = userDoc.data();
           setUserData(data);
+          
+          // Load gottman analysis if available
+          if (data.gottmanAnalysis) {
+            setGottmanAnalysis(data.gottmanAnalysis);
+          }
           
           if (data.openAiResults && (!data.personalityAnalysis || Object.keys(data.personalityAnalysis || {}).length === 0)) {
             setAnalyzingPersonality(true);
@@ -243,21 +320,81 @@ function Analysis() {
       )}
 
 
+      {/*
       <h3 className="mb-4">Analysis Results</h3>
-        <Card className="mb-4">
-          <Card.Body>
-            <Card.Title>Conversation Summary</Card.Title>
-                <Card.Text>
-                  {/*<strong>Relationship context:</strong> {userData.gender}'s conversation
-                  {userData.partnerGender && <span> with a {userData.partnerGender}</span>}*/}
-                </Card.Text>
-                <Card.Text>
-                  <strong>Conflict situation:</strong> {userData.conflictDescription}
-                </Card.Text>
-              </Card.Body>
-            </Card>
+      
+      {analyzingGottman ? (
+        <div className="text-center mb-4">
+          <Spinner animation="border" size="sm" className="me-2" />
+          <span>Analyzing couple conflict patterns...</span>
+        </div>
+      ) : gottmanAnalysis ? (
+        <Row className="mb-4">
+        {gottmanAnalysis.people && Object.entries(gottmanAnalysis.people).map(([person, analysis]) => (
+            <Col md={6} key={person} className="mb-3">
+              <Card className="h-100">
+                <Card.Header
+                  as="h5" 
+                  className="p-2" 
+                  style={{ 
+                    backgroundColor: person === 'Me' ? '#D4F4FF' : '#FFD4D4',
+                    border: 'none'
+                  }}
+                >
+                  {person}'s Conflict Style
+                </Card.Header>
+                <Card.Body>
+                  <Card.Title className="h6">Primary Type: {analysis.primaryType}</Card.Title>
+                  
+                  {analysis.negativePatterns && analysis.negativePatterns.length > 0 && (
+                    <div className="mb-3">
+                      <strong>Negative Patterns:</strong>
+                      <ul className="mb-0 ps-3">
+                        {analysis.negativePatterns.map((pattern, idx) => (
+                          <li key={idx}>{pattern}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {analysis.strengths && analysis.strengths.length > 0 && (
+                    <div className="mb-3">
+                      <strong>Strengths:</strong>
+                      <ul className="mb-0 ps-3">
+                        {analysis.strengths.map((strength, idx) => (
+                          <li key={idx}>{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {analysis.suggestions && analysis.suggestions.length > 0 && (
+                    <div>
+                      <strong>Suggestions:</strong>
+                      <ul className="mb-0 ps-3">
+                        {analysis.suggestions.map((suggestion, idx) => (
+                          <li key={idx}>{suggestion}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          ))}
+          <Button onClick={handleStartClick} className="mt-3 w-100">Start</Button>
+        </Row>
+      ) : (
+        <div className="text-center mb-4">
+          <p>No analysis results available</p>
+          <Button onClick={triggerAnalysis} variant="outline-primary">
+            Generate Analysis
+          </Button>
+        </div>
+      )}
+      */}
       <Button onClick={handleStartClick} className="mt-3 w-100">Start</Button>
-    </Container>
+    </Container> 
   );
 }
 
@@ -289,7 +426,7 @@ Remember: Respond ONLY with the JSON object containing the scores array. No othe
         'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o',
         messages: [
           { 
             role: 'system', 

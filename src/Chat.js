@@ -97,7 +97,7 @@ function Chat() {
                 'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
               },
               body: JSON.stringify({
-                model: 'gpt-4',
+                model: 'gpt-4o',
                 messages: [
                   { role: 'system', content: systemMessage },
                   { role: 'user', content: initialPrompt }

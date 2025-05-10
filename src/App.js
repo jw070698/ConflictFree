@@ -1,9 +1,17 @@
 import './App.css';
-import React, { useState } from 'react';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Analysis from './Analysis';
+import Recommendation from './Recommendation';
 
 function App() {
   return (
-    <div></div>
+    <Router>
+      <Routes>
+        <Route path="/analysis" element={<Analysis />} />
+        <Route path="/recommendation" element={<Recommendation />} />
+      </Routes>
+    </Router>
   );
 }
 
