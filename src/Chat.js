@@ -23,6 +23,10 @@ function Chat() {
     const [recommendations, setRecommendations] = useState(null);
     const [openAiResults, setOpenAiResults] = useState([]);
     const [partnerName, setPartnerName] = useState('Partner');
+    const [partnerGender, setPartnerGender] = useState('they');
+    
+    // 음주 관련 시나리오
+    const [conflictScenario, setConflictScenario] = useState('');
 
     function getParticipantId(senderName) {
         if (senderIdMap.current[senderName] !== undefined) {
@@ -45,6 +49,25 @@ function Chat() {
             const data = docSnap.data();
             setUserData(data);
             
+            if (data.partnerGender) {
+              setPartnerGender(data.partnerGender);
+            }
+            
+            // First, get the partner name
+            let actualPartnerName = "Partner"; // Default name
+            if (data.openAiResults && Array.isArray(data.openAiResults)) {
+              const partnerEntry = data.openAiResults.find(entry => entry.Person !== "Me");
+              if (partnerEntry) {
+                actualPartnerName = partnerEntry.Person;
+                setPartnerName(partnerEntry.Person);
+              }
+            }
+            
+            // New scenario
+            const pronoun = data.partnerGender || 'they';
+            const scenario = `${actualPartnerName} has always enjoyed playing video games, but lately, especially when ${actualPartnerName} is feeling stressed or upset, ${actualPartnerName} tends to stay up all night gaming alone. I'm not against ${actualPartnerName} playing games, I know it's something ${actualPartnerName} enjoys, but I worry about ${actualPartnerName} sleep and health. I also wish ${actualPartnerName} could talk to me about what's bothering ${actualPartnerName} instead of shutting me out and turning to games every time.`;
+            setConflictScenario(scenario);
+            
             if (data.gottmanAnalysis) {
               setGottmanAnalysis(data.gottmanAnalysis);
             }
@@ -56,18 +79,8 @@ function Chat() {
             if (data.openAiResults && Array.isArray(data.openAiResults)) {
               setOpenAiResults(data.openAiResults);
               
-              const partnerEntry = data.openAiResults.find(entry => entry.Person !== 'Me');
-              if (partnerEntry) {
-                setPartnerName(partnerEntry.Person);
-              }
-              
-              const sorted = [...data.openAiResults].sort((a, b) => a.Order - b.Order);
-              const formatted = sorted.map(item => ({
-                sender: item.Person,
-                text: item.Message,
-                order: item.Order
-              }));
-              setConversation(formatted);
+              // 기존 대화 내용은 초기화 (새 시나리오 사용)
+              setConversation([]);
             }
           }
         }
@@ -96,6 +109,66 @@ function Chat() {
         runAnalysis();
     }, [userDocId, userData]);
 
+    // 대화 시작자를 결정하는 함수
+    async function determineConversationStarter() {
+      if (!userData || !gottmanAnalysis || !gottmanAnalysis.people) return "Me";
+      
+      try {
+        // OpenAI API를 사용하여 누가 대화를 시작해야 하는지 결정
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              { 
+                role: 'system', 
+                content: `You are an expert relationship therapist analyzing who should initiate a conversation about a conflict.` 
+              },
+              { 
+                role: 'user', 
+                content: `Based on the following data about two people in a relationship, determine who should start the conversation about their conflict.
+                
+                Person 1 (Me):
+                - Conflict type: ${gottmanAnalysis.people['Me']?.primaryType || 'Unknown'}
+                - Communication patterns: ${gottmanAnalysis.people['Me']?.negativePatterns || 'Unknown'}
+                
+                Person 2 (${partnerName}):
+                - Conflict type: ${gottmanAnalysis.people[partnerName]?.primaryType || 'Unknown'}
+                - Communication patterns: ${gottmanAnalysis.people[partnerName]?.negativePatterns || 'Unknown'}
+                
+                The conflict scenario is: "${conflictScenario}"
+                
+                Choose either "Me" or "${partnerName}" and provide a very brief reasoning (1-2 sentences). Format your response exactly like this:
+                STARTER: [name]
+                REASON: [1-2 sentence explanation]`
+              }
+            ],
+            temperature: 0.7
+          })
+        });
+        
+        const data = await response.json();
+        const aiResponseText = data.choices[0].message.content.trim();
+        
+        // Response parsing
+        const starterMatch = aiResponseText.match(/STARTER:\s*(.*)/i);
+        const reasonMatch = aiResponseText.match(/REASON:\s*(.*)/i);
+        
+        const starter = starterMatch ? starterMatch[1].trim() : "Me";
+        const reason = reasonMatch ? reasonMatch[1].trim() : "";
+        
+        console.log(`Conversation starter: ${starter}, Reason: ${reason}`);
+        return starter === partnerName ? partnerName : "Me";
+      } catch (error) {
+        console.error("Error determining conversation starter:", error);
+        return "Me"; // Default to Me if there's an error
+      }
+    }
+
     useEffect(() => {
       async function generateInitialMessages() {
         if (!userDocId || !userData || !userData.openAiResults) return;
@@ -109,82 +182,88 @@ function Chat() {
         const conflictDescription = userData?.conflictDescription || "No conflict description provided.";
         
         try {
-          const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
+          // 대화 시작자 결정
+          const conversationStarter = await determineConversationStarter();
           
-          // 갓트만 분석 정보 추가
-          const gottmanInfo = gottmanAnalysis?.people?.[participant] 
-              ? `Your Gottman conflict type is: ${gottmanAnalysis.people[participant].primaryType}. 
-                  Your negative patterns: ${gottmanAnalysis.people[participant].negativePatterns}`
-              : "";
-              
-          // 추천 정보 추가
-          let recommendationInfo = "";
-          if (recommendations) {
-              const tips = [
-                  ...(recommendations.whenItHappens || []).slice(0, 1),
-                  ...(recommendations.after || []).slice(0, 1)
-              ].join("; ");
-              
-              recommendationInfo = tips ? `Consider this communication tip: ${tips}` : "";
-          }
-          
-          const systemMessage = `You are ${participant}. 
-              Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
-              Your communication style is: ${personality ? personality.communicationStyle : "Not available"}. 
-              ${gottmanInfo}
-              You are in a \"${conflictDescription}\" situation. 
-              ${recommendationInfo}
-              
-              IMPORTANT INSTRUCTIONS:
-              1. Keep your message concise and short - no more than 1-2 sentences per message.
-              2. If you want to express a complex thought, break it into multiple short messages instead of one long one.
-              3. Respond with 1-3 separate messages by separating them with a triple pipe delimiter (|||).
-              4. Each message should sound natural as a text message.
-              
-              Example response format:
-              Hi, I see your point.||| I'm feeling frustrated about this situation though.||| Can we try to find a compromise?`;
-              
-          const initialPrompt = systemMessage;
-  
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-            },
-            body: JSON.stringify({
-              model: 'gpt-4o',
-              messages: [
-                { 
-                  role: 'system', 
-                  content: systemMessage 
-                },
-                { 
-                  role: 'user', 
-                  content: `You are in a conflict situation about: "${conflictDescription}". What would be your opening message(s)? Remember to keep them short and break longer thoughts into multiple messages.` 
-                }
-              ],
-              temperature: 0.8
-            })
-          });
-          const data = await response.json();
-          let aiResponseText = data.choices[0].message.content.trim();
-          
-          // 메시지를 여러 개로 나누기
-          const messageParts = aiResponseText.split('|||');
-          const aiMessages = messageParts
-            .map(part => part.trim())
-            .filter(part => part.length > 0)
-            .map(text => ({
-              sender: participant,
-              text: text,
-              timestamp: new Date().toISOString()
-            }));
+          // 파트너가 시작하는 경우에만 AI 응답 생성
+          if (conversationStarter === participant) {
+            const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
             
-          // 각 메시지를 대화에 추가하고 저장
-          for (const message of aiMessages) {
-            setConversation(prev => [...prev, message]);
-            await saveMessage(message);
+            // 갓트만 분석 정보 추가
+            const gottmanInfo = gottmanAnalysis?.people?.[participant] 
+                ? `Your Gottman conflict type is: ${gottmanAnalysis.people[participant].primaryType}. 
+                    Your negative patterns: ${gottmanAnalysis.people[participant].negativePatterns}`
+                : "";
+                
+            // 추천 정보 추가
+            let recommendationInfo = "";
+            if (recommendations) {
+                const tips = [
+                    ...(recommendations.whenItHappens || []).slice(0, 1),
+                    ...(recommendations.after || []).slice(0, 1)
+                ].join("; ");
+                
+                recommendationInfo = tips ? `Consider this communication tip: ${tips}` : "";
+            }
+            
+            const systemMessage = `You are ${participant}. 
+                Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
+                Your communication style is: ${personality ? personality.communicationStyle : "Not available"}. 
+                ${gottmanInfo}
+                You are in a "${conflictScenario}" situation. 
+                ${recommendationInfo}
+                
+                IMPORTANT INSTRUCTIONS:
+                1. Keep your message concise and short - no more than 1-2 sentences per message.
+                2. If you want to express a complex thought, break it into multiple short messages instead of one long one.
+                3. Respond with 1-3 separate messages by separating them with a triple pipe delimiter (|||).
+                4. Each message should sound natural as a text message.
+                
+                Example response format:
+                Hi, I see your point.||| I'm feeling frustrated about this situation though.||| Can we try to find a compromise?`;
+                
+            const initialPrompt = systemMessage;
+    
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  { 
+                    role: 'system', 
+                    content: systemMessage 
+                  },
+                  { 
+                    role: 'user', 
+                    content: `You are in a conflict situation about: "${conflictScenario}". You are the one who needs to start this conversation about the drinking issue. What would be your opening message(s)? Remember to keep them short and break longer thoughts into multiple messages.` 
+                  }
+                ],
+                temperature: 0.8
+              })
+            });
+            const data = await response.json();
+            let aiResponseText = data.choices[0].message.content.trim();
+            
+            // 메시지를 여러 개로 나누기
+            const messageParts = aiResponseText.split('|||');
+            const aiMessages = messageParts
+              .map(part => part.trim())
+              .filter(part => part.length > 0)
+              .map(text => ({
+                sender: participant,
+                text: text,
+                timestamp: new Date().toISOString()
+              }));
+              
+            // 각 메시지를 대화에 추가하고 저장
+            for (const message of aiMessages) {
+              setConversation(prev => [...prev, message]);
+              await saveMessage(message);
+            }
           }
         } catch (error) {
           console.error(`Error generating initial AI response:`, error);
@@ -193,40 +272,22 @@ function Chat() {
         setLoadingResponses(false);
       }
       generateInitialMessages();
-    }, [userDocId, userData, conversation, gottmanAnalysis, recommendations, partnerName]);
+    }, [userDocId, userData, conversation, gottmanAnalysis, recommendations, partnerName, conflictScenario]);
 
     async function getAIResponseForParticipant(participant) {
         const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
-        const conflictDescription = userData?.conflictDescription || "No conflict description provided.";
-        const conversationText = conversation.map(msg => `${msg.sender}: ${msg.text}`).join("\n");
         
         // 갓트만 분석 정보 추가
         const gottmanInfo = gottmanAnalysis?.people?.[participant] 
             ? `Your Gottman conflict type is: ${gottmanAnalysis.people[participant].primaryType}. 
                Your negative patterns: ${gottmanAnalysis.people[participant].negativePatterns}`
             : "";
-            
-        // 추천 정보 추가
-        let recommendationInfo = "";
-        if (recommendations) {
-            const tips = [
-                ...(recommendations.whenItHappens || []),
-                ...(recommendations.after || [])
-            ].slice(0, 3).join("; ");
-            
-            recommendationInfo = `
-            Consider these communication tips in your response:
-            ${tips}
-            `;
-        }
         
         const prompt = `You are act as ${participant}. 
             Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
             Your communication style is: ${personality ? personality.communicationStyle : "Not available"}.
             ${gottmanInfo}
-            The conflict to resolve is: ${conflictDescription}.
-            The conversation so far is: 
-            ${conversationText}
+            The conflict to resolve is: ${conflictScenario}.
                         
             Please provide your next message as ${participant} in a natural, conversational tone.
             
@@ -395,7 +456,7 @@ function Chat() {
 
     // Layout
     return (
-      <Container fluid className="py-4" style={{ minHeight: '100vh' }}>
+      <Container fluid className="py-4 mb-5" style={{ minHeight: '100vh' }}>
         <Row>
           {/* Partner Sidebar */}
           <Col md={3} className="d-flex flex-column align-items-center border-end">
@@ -404,17 +465,19 @@ function Chat() {
                 <Card.Title><span role="img" aria-label="partner">👤</span> {partnerName}</Card.Title>
                 {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
                   <div className="mt-2 mb-3">
-                    <small className="text-muted">Their conflict type:</small>
+                    <small className="text-muted">{partnerName}'s conflict type:</small>
                     <h6 className="mb-0">{gottmanAnalysis.people[partnerName].primaryType}</h6>
                   </div>
                 )}
                 {/* 갓트만 분석 결과 표시 */}
+                {/*
                 {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
                   <Alert variant="light" className="p-2 mb-3">
                     <small className="d-block mb-1 text-muted">Their pattern:</small>
                     <p className="small mb-0">{gottmanAnalysis.people[partnerName]?.negativePatterns || "Not available"}</p>
                   </Alert>
                 )}
+                */}
                 {!gottmanAnalysis && (
                   <div>
                     <div className="mb-2">voice</div>
@@ -430,23 +493,24 @@ function Chat() {
           {/* Chat Center */}
           <Col md={6} className="d-flex flex-column align-items-center" style={{ borderTop: '1px solid #dee2e6', borderBottom: '1px solid #dee2e6' }}>
             {/* 대화 목적 표시 */}
+            {/*
             {userData?.conflictDescription && (
               <Alert variant="info" className="w-100 mb-3 py-2">
                 <small className="fw-bold">Conversation topic:</small> {userData.conflictDescription}
               </Alert>
             )}
-            
+            */}
             {/* 대화 관련 팁 표시 */}
             {recommendations && recommendations.whenItHappens && recommendations.whenItHappens.length > 0 && (
-              <Card className="w-100 mb-3 border-primary border-top-0 border-end-0 border-bottom-0 border-3">
-                <Card.Body className="py-2">
+              <Card className="w-100 mb-3 border-primary border-top-0 border-end-0 border-bottom-0 border-3 mt-4" style={{ borderRadius: '0.75rem' }}>
+                <Card.Body className="py-3">
                   <div className="d-flex align-items-center">
-                    <div className="text-primary me-2">💡</div>
                     <div>
-                      <small className="text-primary fw-bold">Communication Tip:</small>
-                      <p className="mb-0 small">
-                        {recommendations.whenItHappens[0]}
-                      </p>
+                      <small className="text-primary fw-bold">New Scenario: </small>
+                      <p className="mb-0 mt-1 px-2">{conflictScenario}</p>
+                      {/*<Alert variant="info" className="w-100 mb-3 py-2">
+                        {conflictScenario}
+                      </Alert>*/}
                     </div>
                   </div>
                 </Card.Body>
@@ -474,7 +538,7 @@ function Chat() {
                 {tip}
               </div>
             )}
-            <div className="d-flex w-100 align-items-center">
+            <div className="d-flex w-100 align-items-center mb-4">
               {/* Highlighted input if needed */}
               {/^you\b/i.test(inputValue.trim()) ? (
                 <div style={{ flex: 1, position: 'relative' }}>
@@ -528,12 +592,14 @@ function Chat() {
                   </div>
                 )}
                 {/* 갓트만 분석 결과 표시 */}
+                {/*
                 {gottmanAnalysis && gottmanAnalysis.people && (
                   <Alert variant="light" className="p-2 mb-3">
                     <small className="d-block mb-1 text-muted">Your pattern:</small>
                     <p className="small mb-0">{gottmanAnalysis.people['Me']?.negativePatterns || "Not available"}</p>
                   </Alert>
                 )}
+                */}
               </Card.Body>
             </Card>
             
