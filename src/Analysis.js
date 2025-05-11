@@ -76,52 +76,11 @@ function Analysis() {
     }
   }, [userData]);
 
-  useEffect(() => {
-    // Run Gottman analysis when scores are available
-    async function runGottmanAnalysis() {
-      if (Object.keys(localScores).length >= 2 && !analyzingGottman && !gottmanAnalysis) {
-        try {
-          console.log("Starting Gottman analysis with scores:", localScores);
-          setAnalyzingGottman(true);
-          
-          // Use the imported function directly
-          const analysis = analyzeConflictTypes(localScores);
-          console.log("Gottman analysis result:", analysis);
-          
-          if (!analysis) {
-            console.error("Analysis returned null or undefined");
-            setAnalyzingGottman(false);
-            return;
-          }
-          
-          // Save Gottman analysis to state
-          setGottmanAnalysis(analysis);
-          
-          // Save Gottman analysis to Firebase
-          if (userDocId) {
-            const userDocRef = doc(db, "users", userDocId);
-            await updateDoc(userDocRef, {
-              gottmanAnalysis: analysis,
-              updatedAt: serverTimestamp()
-            });
-            console.log("Gottman analysis saved to Firebase");
-          }
-        } catch (error) {
-          console.error("Error analyzing Gottman conflict types:", error);
-        } finally {
-          setAnalyzingGottman(false);
-        }
-      }
-    }
-    
-    runGottmanAnalysis();
-  }, [localScores, analyzingGottman, gottmanAnalysis, userDocId]);
-
   // Force an immediate analysis if needed
-  const triggerAnalysis = () => {
+  const triggerAnalysis = async () => {
     if (Object.keys(localScores).length >= 2) {
       console.log("Manually triggering Gottman analysis");
-      const analysis = analyzeConflictTypes(localScores);
+      const analysis = await analyzeConflictTypes(localScores);
       console.log("Manual analysis result:", analysis);
       setGottmanAnalysis(analysis);
     } else {
@@ -175,18 +134,9 @@ function Analysis() {
       // Wait for all updates to complete
       await Promise.all(updatePromises);
       
-      // Save Gottman analysis if available
-      if (gottmanAnalysis) {
-        await updateDoc(userDocRef, {
-          gottmanAnalysis: gottmanAnalysis,
-          updatedAt: serverTimestamp()
-        });
-        console.log("Gottman analysis saved");
-      }
-      
       console.log("All scores saved successfully");
       
-      // Navigate to recommendation page
+      // Navigate to recommendation page without analyzing here
       navigate(`/recommendation?userDocId=${userDocId}`);
     } catch (error) {
       console.error("Error saving analysis results:", error);
@@ -319,80 +269,6 @@ function Analysis() {
         <p>No conflict resolution analysis available</p>
       )}
 
-
-      {/*
-      <h3 className="mb-4">Analysis Results</h3>
-      
-      {analyzingGottman ? (
-        <div className="text-center mb-4">
-          <Spinner animation="border" size="sm" className="me-2" />
-          <span>Analyzing couple conflict patterns...</span>
-        </div>
-      ) : gottmanAnalysis ? (
-        <Row className="mb-4">
-        {gottmanAnalysis.people && Object.entries(gottmanAnalysis.people).map(([person, analysis]) => (
-            <Col md={6} key={person} className="mb-3">
-              <Card className="h-100">
-                <Card.Header
-                  as="h5" 
-                  className="p-2" 
-                  style={{ 
-                    backgroundColor: person === 'Me' ? '#D4F4FF' : '#FFD4D4',
-                    border: 'none'
-                  }}
-                >
-                  {person}'s Conflict Style
-                </Card.Header>
-                <Card.Body>
-                  <Card.Title className="h6">Primary Type: {analysis.primaryType}</Card.Title>
-                  
-                  {analysis.negativePatterns && analysis.negativePatterns.length > 0 && (
-                    <div className="mb-3">
-                      <strong>Negative Patterns:</strong>
-                      <ul className="mb-0 ps-3">
-                        {analysis.negativePatterns.map((pattern, idx) => (
-                          <li key={idx}>{pattern}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {analysis.strengths && analysis.strengths.length > 0 && (
-                    <div className="mb-3">
-                      <strong>Strengths:</strong>
-                      <ul className="mb-0 ps-3">
-                        {analysis.strengths.map((strength, idx) => (
-                          <li key={idx}>{strength}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  {analysis.suggestions && analysis.suggestions.length > 0 && (
-                    <div>
-                      <strong>Suggestions:</strong>
-                      <ul className="mb-0 ps-3">
-                        {analysis.suggestions.map((suggestion, idx) => (
-                          <li key={idx}>{suggestion}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            </Col>
-          ))}
-          <Button onClick={handleStartClick} className="mt-3 w-100">Start</Button>
-        </Row>
-      ) : (
-        <div className="text-center mb-4">
-          <p>No analysis results available</p>
-          <Button onClick={triggerAnalysis} variant="outline-primary">
-            Generate Analysis
-          </Button>
-        </div>
-      )}
-      */}
       <Button onClick={handleStartClick} className="mt-3 w-100">Start</Button>
     </Container> 
   );
