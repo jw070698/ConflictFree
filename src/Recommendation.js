@@ -108,9 +108,13 @@ function Recommendation() {
             You are an expert in couple communication and conflict resolution based on John Gottman's research.
             
             Analyze the following couple's conflict styles and provide tailored communication recommendations.
+
+            Please analyze the specific *interaction dynamics* between these two styles. Focus on how this particular combination of conflict styles tends to behave during conflict—what communication pitfalls are likely to emerge, and what strengths can be leveraged.
             
-            My conflict type: ${meType}
-            Partner's conflict type: ${partnerType}
+            Please ensure that each suggestion feels as if it is distilled from the interaction between two individuals with different conflict styles.
+            - My conflict type: ${meType}
+            - Partner's conflict type: ${partnerType}
+            Focus on communication dynamics that emerge from the clash or complement of these styles, and provide advice that would be realistically helpful in such mixed-style interactions. 
             
             ${pastConversations.length > 0 ? `Here are examples of our recent conversations:\n${conversationExamples}\n\n` : ''}
             
@@ -120,7 +124,7 @@ function Recommendation() {
             2. AFTER - How to repair after a conflict
             3. LONG-TERM - Strategies for improving communication patterns over time
             
-            For each category, provide 3-5 specific, actionable tips that consider both our conflict styles.
+            For each category, provide 3 specific, actionable tips that consider both our conflict styles.
             
             Format the response as a JSON object with these three categories as keys: "whenItHappens", "after", and "longTerm".
             Each category should contain an array of strings, with each string being a recommendation.
@@ -143,7 +147,7 @@ function Recommendation() {
             }
             `;
             
-            console.log("Sending recommendation prompt to OpenAI");
+            console.log("prompt", prompt);
             
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
@@ -493,7 +497,7 @@ function Recommendation() {
         <Container className="py-5">
             {/* Personality Interface */}
             <div className="mb-5">
-                <h3 className="mb-4">Recommendation & Exercise</h3>
+                <h3 className="mb-4">Communication Guide </h3>
                 <div className="position-relative">
                     {/* Personality Types Row */}
                     <Row className="g-4">
@@ -648,14 +652,14 @@ function Recommendation() {
                                             className="w-100 mt-3 me-2"
                                             onClick={handleStartClick}
                                         >
-                                            Let's Simulate
+                                            Let's Practice
                                         </Button>
-                                        <Button 
+                                        {/*<Button 
                                             variant="outline-primary" 
                                             className="w-100 mt-3 ms-2"
                                         >
                                             Let's Exercise
-                                        </Button>
+                                        </Button>*/}
                                     </div>
                                 </Card.Body>
                             </Card>
@@ -663,7 +667,6 @@ function Recommendation() {
                     </Row>
                 </div>
             </div>
-            <Button onClick={() => navigate(`/analysis?userDocId=${userDocId}`)} className="mt-3 w-100">Back to Analysis</Button>
         </Container>
     );
 }
