@@ -4,6 +4,8 @@ import { Form, Button, Container, Row, Col, Card, Alert, Accordion, Spinner, Bad
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
+import { FaInfoCircle, FaLightbulb } from 'react-icons/fa';
+import Highlight from './Highlight';
 import './Real.css';
 
 const db = getFirestore(app);
@@ -24,7 +26,6 @@ function Real() {
     const [loadingResetPoints, setLoadingResetPoints] = useState(false);
     const [resetCount, setResetCount] = useState(0);
     const [practiceChat, setPracticeChat] = useState([]);
-    const [showPracticeChat, setShowPracticeChat] = useState(true);
     const [relevantPracticeMessages, setRelevantPracticeMessages] = useState([]);
     const [currentConversationContext, setCurrentConversationContext] = useState('');
     
@@ -648,6 +649,14 @@ function Real() {
             <span className="text-primary fw-bold me-1">Scenario:</span>
             <span style={{ lineHeight: '1.4' }}>{conflictScenario}</span>
           </div>
+          <div className="mx-auto py-3 px-4 mt-2 mb-3 rounded-3 shadow-sm" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem', lineHeight: '1.5', backgroundColor: '#fff3cd', color: '#856404' }}>
+            <div className="d-flex align-items-start">
+              <FaInfoCircle className="me-2 mt-1" />
+              <div>
+                <strong>Instructions:</strong> This conversation is based on your practice dialogue. You can either select reset points to restart from that point or continue the conversation without resetting.
+              </div>
+            </div>
+          </div>
         </div>
         <Row>
           {/* Left Sidebar */}
@@ -716,6 +725,18 @@ function Real() {
                 )}
               </Card.Body>
             </Card>
+
+            {/* Recommendations for continuing the conversation */}
+            <Card className="mb-3">
+                <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
+                    <strong>Recommendations for Continuing the Conversation</strong>
+                </Card.Header>
+                <Card.Body>
+                    <p className="small text-muted">
+                        recoom
+                    </p>
+                </Card.Body>
+            </Card>
           </Col>
 
           {/* Chat Center */}
@@ -747,26 +768,9 @@ function Real() {
                   if (isReset) {
                     const resetReason = getResetPointReason(idx);
                     customMessage = (
-                      <div>
-                        <div>{msg.text}</div>
-                        <div style={{ 
-                          marginTop: '5px', 
-                          backgroundColor: '#fff3cd', 
-                          padding: '4px 8px', 
-                          borderRadius: '4px',
-                          fontSize: '0.85em',
-                          borderLeft: '3px solid #ffc107'
-                        }}>
-                          <OverlayTrigger
-                            placement="top"
-                            overlay={
-                              <Tooltip id={`reset-reason-${idx}`}>
-                                {resetReason}
-                              </Tooltip>
-                            }
-                          >
-                            <span style={{ fontWeight: 'bold', color: '#856404', cursor: 'help' }}>Reset Point </span>
-                          </OverlayTrigger>
+                      <>
+                        {msg.text}
+                        <span style={{ display: 'block', marginTop: '4px' }}>
                           <OverlayTrigger
                             placement="right"
                             overlay={
@@ -788,9 +792,9 @@ function Real() {
                             >
                                 Reset Here
                             </Button>
-                            </OverlayTrigger>
-                        </div>
-                      </div>
+                          </OverlayTrigger>
+                        </span>
+                      </>
                     );
                   }
                   
@@ -816,22 +820,13 @@ function Real() {
             </div>
             
             <div className="d-flex w-100 align-items-center mb-4">
-              <Form.Control
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Type your message..."
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
-                style={{ fontSize: '1rem', borderRadius: '.25rem' }}
+              <Highlight
+                inputValue={inputValue}
+                setInputValue={setInputValue}
+                onSend={handleSendMessage}
+                apiKey={process.env.REACT_APP_OPENAI_API_KEY}
+                disabled={loadingResponses}
               />
-              <Button variant="primary" onClick={handleSendMessage} className="ms-2" style={{ borderRadius: '.25rem', padding: '0.375rem 0.75rem' }}>
-                Send
-              </Button>
             </div>
             
             {/* Bottom buttons */}
@@ -850,90 +845,76 @@ function Real() {
           {/* Right Sidebar */}
           <Col md={3}>
             {/* Practice Chat History Section */}
-            <Card className="mb-3 shadow-sm">
-              <Card.Header 
-                className="bg-info bg-opacity-10 d-flex justify-content-between align-items-center practice-chat-header"
-                onClick={() => setShowPracticeChat(!showPracticeChat)}
-              >
-                <span className="fw-bold">
-                  <i className={`fas fa-comment-dots me-2`}></i>
-                  Your Practice Conversation
-                </span>
-                <div>
-                  <Badge bg="info" pill className="me-2">
-                    {practiceChat.length}
-                  </Badge>
-                  <i className={`fas fa-chevron-${showPracticeChat ? 'up' : 'down'}`}></i>
+            <Card className="mb-3 practice-chat-card">
+              <Card.Header className="bg-primary text-white d-flex align-items-center">
+                <strong>Your Practice Conversation</strong>
+                <div className="tooltip-container ms-2" onClick={(e) => e.stopPropagation()}>
+                  <FaInfoCircle className="text-white" style={{ fontSize: '1.25rem' }} />
+                  <div className="black-tooltip info-tooltip" style={{ top: '35px', right: '-15px', left: 'auto', transform: 'none', width: '280px' }}>
+                    Highlighted messages may be relevant to your current conversation. As you chat, we'll identify messages from your practice that could be helpful now.
+                  </div>
                 </div>
               </Card.Header>
-              <Accordion activeKey={showPracticeChat ? '0' : ''}>
-                <Accordion.Collapse eventKey="0">
-                  <Card.Body 
-                    className="p-2 practice-chat-body"
-                    ref={practiceChatRef}
-                  >
-                    {/* Full Practice Chat History with highlighted relevant messages */}
-                    {practiceChat.length > 0 ? (
-                      <div className="p-2">
-                        <small className="text-muted mb-3 d-block text-center fst-italic">
-                          <i className="fas fa-lightbulb me-1 text-warning"></i>
-                          Highlighted messages may be relevant to your current conversation
-                        </small>
-                        <div className="chat-container py-2">
-                          {practiceChat.map((msg, idx) => {
-                            // Check if this message is relevant (only for "Me" messages)
-                            const isRelevant = msg.sender === "Me" && 
-                              relevantPracticeMessages.some(relevantMsg => 
-                                relevantMsg.text === msg.text && 
-                                relevantMsg.timestamp === msg.timestamp
-                              );
-                            
-                            return (
-                              <div 
-                                key={idx}
-                                className={`d-flex mb-3 ${msg.sender === 'Me' ? 'justify-content-end' : 'justify-content-start'}`}
-                                ref={el => {
-                                  if (isRelevant) {
-                                    highlightedMessagesRefs.current[idx] = el;
-                                  }
-                                }}
-                              >
-                                <div 
-                                  className={`message-bubble p-2 px-3 rounded-3 ${
-                                    msg.sender === 'Me' 
-                                      ? 'bg-primary bg-opacity-10 text-primary' 
-                                      : 'bg-success bg-opacity-10 text-success'
-                                  } ${isRelevant ? 'relevant-highlight relevant-message' : ''}`}
-                                  style={{maxWidth: '85%'}}
-                                >
-                                  {isRelevant && (
-                                    <div className="lightbulb-icon">
-                                      <i className="fas fa-lightbulb"></i>
-                                    </div>
-                                  )}
-                                  <div className="small fw-bold mb-1">
-                                    {msg.sender}
-                                  </div>
-                                  <div className="message-text">
-                                    {msg.text}
-                                  </div>
-                                  <div className="message-time text-muted">
-                                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                  </div>
+              <Card.Body 
+                className="p-2 practice-chat-body"
+                ref={practiceChatRef}
+              >
+                {/* Full Practice Chat History with highlighted relevant messages */}
+                {practiceChat.length > 0 ? (
+                  <div className="p-2">
+                    <div className="chat-container py-2">
+                      {practiceChat.map((msg, idx) => {
+                        // Check if this message is relevant (only for "Me" messages)
+                        const isRelevant = msg.sender === "Me" && 
+                          relevantPracticeMessages.some(relevantMsg => 
+                            relevantMsg.text === msg.text && 
+                            relevantMsg.timestamp === msg.timestamp
+                          );
+                        
+                        return (
+                          <div 
+                            key={idx}
+                            className={`d-flex mb-3 ${msg.sender === 'Me' ? 'justify-content-end' : 'justify-content-start'}`}
+                            ref={el => {
+                              if (isRelevant) {
+                                highlightedMessagesRefs.current[idx] = el;
+                              }
+                            }}
+                          >
+                            <div 
+                              className={`message-bubble p-2 px-3 rounded-3 ${
+                                msg.sender === 'Me' 
+                                  ? 'bg-primary bg-opacity-10 text-primary' 
+                                  : 'bg-success bg-opacity-10 text-success'
+                              } ${isRelevant ? 'relevant-highlight relevant-message' : ''}`}
+                              style={{maxWidth: '85%'}}
+                            >
+                              {isRelevant && (
+                                <div className="lightbulb-icon">
+                                  <FaLightbulb />
                                 </div>
+                              )}
+                              <div className="small fw-bold mb-1">
+                                {msg.sender}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 text-center text-muted">
-                        <small>No practice chat history available</small>
-                      </div>
-                    )}
-                  </Card.Body>
-                </Accordion.Collapse>
-              </Accordion>
+                              <div className="message-text">
+                                {msg.text}
+                              </div>
+                              <div className="message-time text-muted">
+                                {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 text-center text-muted">
+                    <small>No practice chat history available</small>
+                  </div>
+                )}
+              </Card.Body>
             </Card>
           </Col>
         </Row>

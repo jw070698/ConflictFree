@@ -87,7 +87,7 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-.lightbulb-icon i {
+.lightbulb-icon svg {
   font-size: 0.7rem;
   color: #fff;
 }
@@ -110,4 +110,61 @@
 .relevant-message {
   border: 1px dashed #ffc107;
   background-color: rgba(255, 244, 229, 0.7);
+  position: relative;
+}
+
+/* Black tooltip for relevant messages */
+.black-tooltip {
+  position: absolute;
+  visibility: hidden;
+  background-color: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 10px 15px;
+  border-radius: 6px;
+  width: 250px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: left;
+  opacity: 0;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  pointer-events: none;
+}
+
+.relevant-message:hover .black-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Add a small arrow at the top of the tooltip */
+.black-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 8px 8px 8px;
+  border-style: solid;
+  border-color: transparent transparent rgba(0, 0, 0, 0.85) transparent;
+}
+
+/* Tooltip container hover behavior */
+.tooltip-container {
+  position: relative;
+  cursor: help;
+}
+
+.tooltip-container:hover .black-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Info tooltip arrow position */
+.info-tooltip::before {
+  right: 20px;
+  left: auto;
 } 
