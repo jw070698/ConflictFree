@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Form, Button, Container, Row, Col, ProgressBar, Card, Alert, Accordion } from 'react-bootstrap';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Form, Button, Container, Row, Col, ProgressBar, Card, Alert, Accordion, Modal } from 'react-bootstrap';
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
@@ -9,7 +9,8 @@ import { normalizeOpenAiResults, processAllPersonalityAnalyses } from './Analysi
 const db = getFirestore(app);
 
 function Chat() {
-    const [searchParams] = useSearchParams(); 
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const userDocId = searchParams.get("userDocId");
     const [userData, setUserData] = useState(null);
     const [conversation, setConversation] = useState([]);
@@ -24,6 +25,9 @@ function Chat() {
     const [openAiResults, setOpenAiResults] = useState([]);
     const [partnerName, setPartnerName] = useState('Partner');
     const [partnerGender, setPartnerGender] = useState('they');
+    const [practiceCompleted, setPracticeCompleted] = useState(false);
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [feedbackContent, setFeedbackContent] = useState('');
     
     // 음주 관련 시나리오
     const [conflictScenario, setConflictScenario] = useState('');
@@ -82,6 +86,11 @@ function Chat() {
               // 기존 대화 내용은 초기화 (새 시나리오 사용)
               setConversation([]);
             }
+            
+            // 기존 채팅 히스토리가 있으면 로드
+            if (data.chatHistory && Array.isArray(data.chatHistory) && data.chatHistory.length > 0) {
+              setConversation(data.chatHistory);
+            }
           }
         }
         fetchUserData();
@@ -109,12 +118,10 @@ function Chat() {
         runAnalysis();
     }, [userDocId, userData]);
 
-    // 대화 시작자를 결정하는 함수
+    // Decide who should start the conversation
     async function determineConversationStarter() {
       if (!userData || !gottmanAnalysis || !gottmanAnalysis.people) return "Me";
-      
       try {
-        // OpenAI API를 사용하여 누가 대화를 시작해야 하는지 결정
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -179,11 +186,29 @@ function Chat() {
         if (!participant) return;
         
         setLoadingResponses(true);
-        const conflictDescription = userData?.conflictDescription || "No conflict description provided.";
         
         try {
           // 대화 시작자 결정
           const conversationStarter = await determineConversationStarter();
+          
+          // 채팅 히스토리 가져오기
+          const userDocRef = doc(db, "users", userDocId);
+          const docSnap = await getDoc(userDocRef);
+          let previousChat = [];
+          
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.chatHistory && Array.isArray(data.chatHistory)) {
+              previousChat = data.chatHistory;
+              
+              // 채팅 히스토리가 있으면 대화 상태에 설정하고 함수 종료
+              if (previousChat.length > 0) {
+                setConversation(previousChat);
+                setLoadingResponses(false);
+                return;
+              }
+            }
+          }
           
           // 파트너가 시작하는 경우에만 AI 응답 생성
           if (conversationStarter === participant) {
@@ -196,31 +221,29 @@ function Chat() {
                 : "";
                 
             // 추천 정보 추가
-            let recommendationInfo = "";
-            if (recommendations) {
-                const tips = [
-                    ...(recommendations.whenItHappens || []).slice(0, 1),
-                    ...(recommendations.after || []).slice(0, 1)
-                ].join("; ");
+            //let recommendationInfo = "";
+            //if (recommendations) {
+            //    const tips = [
+            //        ...(recommendations.whenItHappens || []).slice(0, 1),
+            //        ...(recommendations.after || []).slice(0, 1)
+            //    ].join("; ");
                 
-                recommendationInfo = tips ? `Consider this communication tip: ${tips}` : "";
-            }
+            //    recommendationInfo = tips ? `Consider this communication tip: ${tips}` : "";
+            //}
             
             const systemMessage = `You are ${participant}. 
                 Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
                 Your communication style is: ${personality ? personality.communicationStyle : "Not available"}. 
                 ${gottmanInfo}
                 You are in a "${conflictScenario}" situation. 
-                ${recommendationInfo}
                 
                 IMPORTANT INSTRUCTIONS:
-                1. Keep your message concise and short - no more than 1-2 sentences per message.
+                1. Keep your message concise and short.
                 2. If you want to express a complex thought, break it into multiple short messages instead of one long one.
-                3. Respond with 1-3 separate messages by separating them with a triple pipe delimiter (|||).
+                3. Respond with 1-2 separate messages by separating them with a triple pipe delimiter (|||).
                 4. Each message should sound natural as a text message.
-                
-                Example response format:
-                Hi, I see your point.||| I'm feeling frustrated about this situation though.||| Can we try to find a compromise?`;
+                5. Do NOT suggest meeting or resolving the issue outside of this chat. All resolution must occur within this conversation only.
+                `;
                 
             const initialPrompt = systemMessage;
     
@@ -239,7 +262,7 @@ function Chat() {
                   },
                   { 
                     role: 'user', 
-                    content: `You are in a conflict situation about: "${conflictScenario}". You are the one who needs to start this conversation about the drinking issue. What would be your opening message(s)? Remember to keep them short and break longer thoughts into multiple messages.` 
+                    content: `You are in a conflict situation about: "${conflictScenario}". You are the one who needs to start this conversation about the gaming issue. What would be your opening message(s)? Remember to keep them short and break longer thoughts into multiple messages.` 
                   }
                 ],
                 temperature: 0.8
@@ -277,28 +300,33 @@ function Chat() {
     async function getAIResponseForParticipant(participant) {
         const personality = userData?.personalityAnalysis ? userData.personalityAnalysis[participant] : null;
         
+        // 이전 대화 내용을 문자열로 변환
+        const conversationText = conversation.map(msg => `${msg.sender}: ${msg.text}`).join("\n");
+        
         // 갓트만 분석 정보 추가
         const gottmanInfo = gottmanAnalysis?.people?.[participant] 
             ? `Your Gottman conflict type is: ${gottmanAnalysis.people[participant].primaryType}. 
                Your negative patterns: ${gottmanAnalysis.people[participant].negativePatterns}`
             : "";
         
-        const prompt = `You are act as ${participant}. 
+        const prompt = `You are act as ${participant}, you are in romantic relationship. 
             Your personality traits are: ${personality ? personality.personalityTraits : "Not available"}. 
             Your communication style is: ${personality ? personality.communicationStyle : "Not available"}.
             ${gottmanInfo}
             The conflict to resolve is: ${conflictScenario}.
+            
+            The conversation so far:
+            ${conversationText}
                         
             Please provide your next message as ${participant} in a natural, conversational tone.
+            Your response should directly connect to what was just said in the conversation.
             
             IMPORTANT INSTRUCTIONS:
-            1. Keep your message concise and short; no more than 1-2 sentences per message.
+            1. Keep your message concise and short.
             2. If you want to express a complex thought, break it into multiple short messages instead of one long one.
-            3. Respond with 1-3 separate messages by separating them with a triple pipe delimiter (|||).
+            3. Respond with 1-2 separate messages by separating them with a triple pipe delimiter (|||).
             4. Each message should sound natural as a text message.
-            
-            Example response format:
-            Hi, I see your point.||| I'm feeling frustrated about this situation though.||| Can we try to find a compromise?
+            5. Do NOT suggest meeting or resolving the issue outside of this chat. All resolution must occur within this conversation only.
             
             Respond only with the message text(s).`;
     
@@ -454,6 +482,126 @@ function Chat() {
       checkInputAndSuggest();
     }, [inputValue, recommendations, gottmanAnalysis]);
 
+    // Handle practice completion
+    const handlePracticeComplete = async () => {
+      if (window.confirm("Are you sure you want to end this conversation practice?")) {
+        setPracticeCompleted(true);
+        setLoadingResponses(true);
+        
+        try {
+          // Save practice completion status to Firebase
+          if (userDocId) {
+            await updateDoc(doc(db, "users", userDocId), {
+              practiceCompleted: true,
+              practiceEndTime: serverTimestamp(),
+              messageCount: conversation.length,
+              updatedAt: serverTimestamp()
+            });
+            
+            // Get conversation feedback from OpenAI
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: 'gpt-4o',
+                messages: [
+                  { 
+                    role: 'system', 
+                    content: `You are a relationship therapist analyzing a practice conversation between partners.` 
+                  },
+                  { 
+                    role: 'user', 
+                    content: `Analyze the following conversation about this scenario:
+                    "${conflictScenario}"
+                    
+                    Conversation:
+                    ${conversation.map(msg => `${msg.sender}: ${msg.text}`).join("\n")}
+                    
+                    Provide feedback on this practice conversation. Include:
+                    1. A positive comment on what went well (2-3 sentences)
+                    2. One suggestion for improvement (1-2 sentences)
+                    3. A brief note of encouragement`
+                  }
+                ],
+                temperature: 0.7
+              })
+            });
+            
+            const data = await response.json();
+            const feedback = data.choices[0].message.content;
+            
+            // Show feedback in modal instead of alert
+            setFeedbackContent(feedback);
+            setShowFeedbackModal(true);
+          } else {
+            setFeedbackContent("Practice session completed! Now you're ready for the real conversation. Good luck!");
+            setShowFeedbackModal(true);
+          }
+        } catch (error) {
+          console.error("Error completing practice:", error);
+          setFeedbackContent("Practice session completed! Now you're ready for the real conversation. Good luck!");
+          setShowFeedbackModal(true);
+        }
+        
+        setLoadingResponses(false);
+      }
+    };
+
+    // Reset chat function
+    const handleResetChat = async () => {
+      if (window.confirm("Are you sure you want to reset this conversation? All messages will be cleared.")) {
+        setLoadingResponses(true);
+        
+        try {
+          // Clear conversation from state
+          setConversation([]);
+          
+          // Clear conversation from Firebase if needed
+          if (userDocId) {
+            await updateDoc(doc(db, "users", userDocId), {
+              chatHistory: [],
+              lastReset: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          }
+          
+          setLoadingResponses(false);
+          
+          // After a brief delay, reload the page to get fresh state
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+          
+        } catch (error) {
+          console.error("Error resetting chat:", error);
+          setLoadingResponses(false);
+        }
+      }
+    };
+
+    // Handle when user moves to real conversation
+    const handleMoveToRealConversation = () => {
+      setShowFeedbackModal(false);
+      
+      // Save the scenario to Firebase for Real component to use
+      if (userDocId) {
+        updateDoc(doc(db, "users", userDocId), {
+          conflictScenario: conflictScenario,
+          practiceCompletedAt: serverTimestamp(),
+          movingToRealConversation: true,
+          updatedAt: serverTimestamp()
+        }).catch(error => {
+          console.error("Error saving scenario before navigation:", error);
+        });
+      }
+      
+      // Navigate to the Real component with the userDocId
+      navigate(`/real?userDocId=${userDocId}`);
+    };
+
     // Layout
     return (
       <Container fluid className="py-4 mb-5" style={{ minHeight: '100vh' }}>
@@ -578,6 +726,27 @@ function Chat() {
                 Send
               </Button>
             </div>
+            
+            {/* Bottom buttons */}
+            <div className="d-flex justify-content-between mt-2 mb-2">
+              <Button 
+                variant="outline-secondary" 
+                style={{ borderRadius: '.25rem', padding: '0.375rem 0.75rem' }}
+                onClick={handleResetChat}
+                disabled={loadingResponses}
+              >
+                Reset Chat
+              </Button>
+              
+              <Button 
+                variant="outline-success" 
+                style={{ borderRadius: '.25rem', padding: '0.375rem 1.5rem' }}
+                onClick={handlePracticeComplete}
+                disabled={practiceCompleted || loadingResponses}
+              >
+                {practiceCompleted ? "Practice Completed" : loadingResponses ? "Processing..." : "Done with Practice"}
+              </Button>
+            </div>
           </Col>
 
           {/* Me Sidebar */}
@@ -671,6 +840,37 @@ function Chat() {
             )}
           </Col>
         </Row>
+        
+        {/* Feedback Modal */}
+        <Modal 
+          show={showFeedbackModal} 
+          onHide={() => setShowFeedbackModal(false)}
+          centered
+        >
+          <Modal.Header closeButton>
+            <Modal.Title>Practice Completed</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="mb-4">
+              <h5 className="mb-2">Feedback:</h5>
+              {feedbackContent.split('\n').map((paragraph, idx) => (
+                <p key={idx}>{paragraph}</p>
+              ))}
+            </div>
+            
+            <div className="text-center">
+              <p className="text-success">Now you're ready for the real conversation!</p>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowFeedbackModal(false)}>
+              Close
+            </Button>
+            <Button variant="primary" onClick={handleMoveToRealConversation}>
+              Move on to the real conversation
+            </Button>
+          </Modal.Footer>
+        </Modal>
       </Container>
     );
 }

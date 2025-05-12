@@ -1,0 +1,113 @@
+.chat-reset-point {
+  box-shadow: 0 0 0 2px #ff9800, 0 0 10px rgba(255, 152, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.chat-reset-point:hover {
+  box-shadow: 0 0 0 3px #ff9800, 0 0 15px rgba(255, 152, 0, 0.5);
+}
+
+.typing-indicator {
+  margin-bottom: 10px;
+}
+
+.typing-indicator .spinner-grow {
+  margin: 0 2px;
+  opacity: 0.7;
+}
+
+/* Practice chat styles */
+.chat-container {
+  padding: 10px 5px;
+}
+
+.message-bubble {
+  border-radius: 18px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.message-text {
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Different bubble styles based on sender */
+.message-bubble.bg-primary {
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble.bg-success {
+  border-bottom-left-radius: 4px;
+}
+
+/* Highlight animation for relevant messages */
+@keyframes pulse-highlight {
+  0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+}
+
+.relevant-highlight {
+  animation: pulse-highlight 2s infinite;
+}
+
+/* Scenario container styles */
+.scenario-container {
+  border-left: 3px solid #0d6efd;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background-color: rgba(13, 110, 253, 0.05);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+/* Reset point styles */
+.reset-reason-tooltip {
+  max-width: 250px;
+}
+
+/* Practice chat header */
+.practice-chat-header {
+  border-left: 4px solid #0dcaf0;
+  cursor: pointer;
+}
+
+/* Lightbulb icon for relevant messages */
+.lightbulb-icon {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  background-color: #ffc107;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.lightbulb-icon i {
+  font-size: 0.7rem;
+  color: #fff;
+}
+
+/* Message time display */
+.message-time {
+  font-size: 0.7rem;
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* Card body for chat scrolling container */
+.practice-chat-body {
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #f8f9fa;
+}
+
+/* Relevant message styling */
+.relevant-message {
+  border: 1px dashed #ffc107;
+  background-color: rgba(255, 244, 229, 0.7);
+} 

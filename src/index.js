@@ -8,6 +8,7 @@ import Analysis from './Analysis';
 import Recommendation from './Recommendation';
 import Game from './Game';
 import Chat from './Chat';
+import Real from './Real';
 import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
@@ -22,6 +23,7 @@ root.render(
       <Route path="/Recommendation" element={<Recommendation />} />
       {/*<Route path="/Game" element={<Game />} />*/}
       <Route path="/Chat" element={<Chat />} />
+      <Route path="/Real" element={<Real />} />
     </Routes>
   </BrowserRouter>
 );
