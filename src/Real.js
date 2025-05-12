@@ -28,6 +28,7 @@ function Real() {
     const [practiceChat, setPracticeChat] = useState([]);
     const [relevantPracticeMessages, setRelevantPracticeMessages] = useState([]);
     const [currentConversationContext, setCurrentConversationContext] = useState('');
+    const [duringRecommendations, setDuringRecommendations] = useState([]);
     
     // Refs for scrolling
     const practiceChatRef = useRef(null);
@@ -68,6 +69,11 @@ function Real() {
               if (partnerEntry) {
                 setPartnerName(partnerEntry.Person);
               }
+            }
+            
+            // Set during-conflict recommendations if available
+            if (data.communicationRecommendations && Array.isArray(data.communicationRecommendations.whenItHappens)) {
+              setDuringRecommendations(data.communicationRecommendations.whenItHappens);
             }
             
             // Load existing real chat history if available
@@ -732,9 +738,23 @@ function Real() {
                     <strong>Recommendations for Continuing the Conversation</strong>
                 </Card.Header>
                 <Card.Body>
-                    <p className="small text-muted">
-                        recoom
-                    </p>
+                    {duringRecommendations && duringRecommendations.length > 0 ? (
+                        <ul className="mb-0 ps-3 small">
+                            {duringRecommendations.map((tip, idx) => (
+                                <li key={idx} className="mb-2">
+                                    {tip && tip.includes(":") ? (
+                                        <>
+                                            <strong className="text-primary">{tip.split(":")[0].trim()}</strong>: {tip.split(":")[1].trim()}
+                                        </>
+                                    ) : tip}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="small text-muted">
+                            No recommendations available.
+                        </p>
+                    )}
                 </Card.Body>
             </Card>
           </Col>
