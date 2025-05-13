@@ -10,6 +10,78 @@
   animation: highlight-pulse 1.5s ease-in-out;
 }
 
+/* Strong tone highlighting */
+.strong-tone-highlight {
+  background-color: #e3f2fd;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #1976d2;
+  color: #0d47a1;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+/* Blaming language highlighting */
+.blaming-language-highlight {
+  background-color: #e8f5e9;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #388e3c;
+  color: #1b5e20;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+/* Not concise (too long) highlighting - Changed to purple */
+.not-concise-highlight {
+  background-color: #f3e5f5;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #9c27b0;
+  color: #6a1b9a;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+/* Positive start highlighting - Changed to amber/orange */
+.positive-start-highlight {
+  background-color: #fff8e1;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #ff9800;
+  color: #e65100;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+/* Non-judgmental highlighting - Changed to indigo */
+.non-judgmental-highlight {
+  background-color: #e8eaf6;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #3f51b5;
+  color: #1a237e;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
+/* Agreement highlighting - Changed to teal */
+.agreement-highlight {
+  background-color: #e0f2f1;
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: bold;
+  text-decoration: underline wavy #009688;
+  color: #004d40;
+  display: inline-block;
+  animation: highlight-pulse 1.5s ease-in-out;
+}
+
 @keyframes highlight-pulse {
   0% { transform: scale(1); }
   50% { transform: scale(1.05); }
@@ -22,30 +94,209 @@
   margin-top: 60px; /* Much more space for the suggestion */
 }
 
+/* Suggestions container */
+.suggestions-container {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  overflow: hidden; /* 경계를 벗어나는 내용 숨김 */
+  max-width: none;
+}
+
+.suggestions-container .alert {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  display: block;
+}
+
+.suggestions-container small {
+  width: 100%;
+  display: block;
+}
+
+/* Alert container styles to ensure full width */
+.alert-container {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Forcing bootstrap alerts to take full width */
+.alert {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: block;
+}
+
 /* I-language suggestion */
 .i-language-suggestion {
-  position: absolute;
-  top: -55px; /* Positioned further above the input */
-  left: 0;
+  position: relative;
   width: 100%;
-  z-index: 1000; /* Even higher z-index */
-  animation: slide-down 0.3s ease-out;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
 }
 
 .i-language-suggestion .alert {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border: none;
-  background-color: #fff3cd; /* Explicit background color */
-  color: #856404; /* Explicit text color */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #ffc107;
+  background-color: #ffffff;
+  color: #856404;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Mild tone suggestion */
+.mild-tone-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.mild-tone-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #2196f3;
+  background-color: #ffffff;
+  color: #004085;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Non-blaming suggestion */
+.non-blaming-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.non-blaming-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #4caf50;
+  background-color: #ffffff;
+  color: #155724;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Be concise suggestion - Changed to purple */
+.be-concise-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.be-concise-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #9c27b0;
+  background-color: #ffffff;
+  color: #6a1b9a;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Positive start suggestion - Changed to amber/orange */
+.positive-start-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.positive-start-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #ff9800;
+  background-color: #ffffff;
+  color: #e65100;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Non-judgmental suggestion - Changed to indigo */
+.non-judgmental-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.non-judgmental-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #3f51b5;
+  background-color: #ffffff;
+  color: #1a237e;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* Agreement suggestion - Changed to teal */
+.agreement-suggestion {
+  position: relative;
+  width: 100%;
+  z-index: 1050;
+  animation: slide-up 0.2s ease-out;
+  margin-bottom: 0;
+}
+
+.agreement-suggestion .alert {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #009688;
+  background-color: #ffffff;
+  color: #004d40;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  border-radius: 4px;
+  width: 100%;
+  display: block;
+}
+
+/* 위로 올라오는 애니메이션 (아래에서 위로) */
+@keyframes slide-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 /* Input container - ensures proper spacing */
 .input-container {
-  margin-top: 10px;
   width: 100%;
+  position: relative;
 }
 
-@keyframes slide-down {
-  from { transform: translateY(-10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+/* 알림이 채팅창과 겹치지 않도록 마진 제거 (개별 컴포넌트에서 처리) */
+.suggestions-container + * {
+  margin-top: 0;
+  margin-bottom: 0;
 }

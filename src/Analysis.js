@@ -295,30 +295,30 @@ ${messages.join('\n')}
 Remember: Respond ONLY with the JSON object containing the scores array. No other text.`;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+       'Content-Type': 'application/json',
+       'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [
+       messages: [
           { 
             role: 'system', 
             content: 'You are a JSON-only response system. Only output valid JSON objects containing scores array. No other text.'
           },
-          { role: 'user', content: prompt }
+         { role: 'user', content: prompt }
         ],
         temperature: 0.3 
-      })
-    });
+    })
+  });
 
     if (!response.ok) {
       throw new Error(`API request failed: ${response.status}`);
     }
-
-    const data = await response.json();
+  
+  const data = await response.json();
     if (!data.choices?.[0]?.message?.content) {
       throw new Error('Invalid API response structure');
     }

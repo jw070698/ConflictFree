@@ -4,7 +4,7 @@ import { Form, Button, Container, Row, Col, Card, Alert, Accordion, Spinner, Bad
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
-import { FaInfoCircle, FaLightbulb } from 'react-icons/fa';
+import { FaInfoCircle, FaLightbulb, FaSyncAlt } from 'react-icons/fa';
 import Highlight from './Highlight';
 import './Real.css';
 
@@ -646,16 +646,57 @@ function Real() {
         return () => clearTimeout(scrollTimeout);
     }, [relevantPracticeMessages, practiceChat]);
 
+    // Effect to highlight reset points in the chat
+    useEffect(() => {
+        // Wait for the DOM to update
+        const highlightTimeout = setTimeout(() => {
+            // Find all the chat bubbles - they typically have a class like 'chat-bubble' or similar
+            const chatFeedContainer = document.querySelector('.chat-feed-container');
+            if (!chatFeedContainer) return;
+            
+            // Reset all previous highlights
+            const previousHighlights = chatFeedContainer.querySelectorAll('.message-bubble-reset-point');
+            previousHighlights.forEach(el => {
+                el.classList.remove('message-bubble-reset-point');
+            });
+            
+            // Find all message bubbles for "Me" and add highlighting to those that are reset points
+            const messageBubbles = chatFeedContainer.querySelectorAll('.bubble');
+            const resetIndices = resetPoints
+                .filter(point => point.sender === "Me")
+                .map(point => point.index);
+            
+            // Add a dashed yellow border to chat bubbles at reset point indices
+            messageBubbles.forEach((bubble, idx) => {
+                // Check if this bubble represents a reset point
+                if (resetIndices.includes(idx)) {
+                    // Apply the highlighting class
+                    bubble.classList.add('message-bubble-reset-point');
+                    
+                    // Alternatively, we can add an after pseudo-element with CSS
+                    const wrapper = document.createElement('div');
+                    wrapper.classList.add('chat-bubble-reset');
+                    
+                    // Replace the original bubble with our wrapped version
+                    bubble.parentNode.insertBefore(wrapper, bubble);
+                    wrapper.appendChild(bubble);
+                }
+            });
+        }, 500);
+        
+        return () => clearTimeout(highlightTimeout);
+    }, [resetPoints, conversation]);
+
     // Layout
     return (
       <Container fluid className="py-4 mb-5" style={{ minHeight: '100vh' }}>
         <div className="text-center mb-1">
-          <h4>Real Conversation</h4>
+          <h4>Simulated Conversation</h4>
           <div className="scenario-container mx-auto py-2 px-3 my-1 border-start border-3 border-primary rounded-end bg-light bg-opacity-50" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem' }}>
             <span className="text-primary fw-bold me-1">Scenario:</span>
             <span style={{ lineHeight: '1.4' }}>{conflictScenario}</span>
           </div>
-          <div className="mx-auto py-3 px-4 mt-2 mb-3 rounded-3 shadow-sm" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem', lineHeight: '1.5', backgroundColor: '#fff3cd', color: '#856404' }}>
+          <div className="mx-auto py-3 px-4 mt-2 mb-3 rounded-3 shadow-sm" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem', lineHeight: '1.5', backgroundColor: '#fff3cd', color: 'black' }}>
             <div className="d-flex align-items-start">
               <FaInfoCircle className="me-2 mt-1" />
               <div>
@@ -667,100 +708,91 @@ function Real() {
         <Row>
           {/* Left Sidebar */}
           <Col md={3}>
-            <Card className="mb-3">
-              <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
-                <strong>Recommended Reset Points</strong>
-                {/*}
-                <Button 
-                  variant="outline-light" 
-                  size="sm" 
-                  onClick={handleRefreshRecommendations}
-                  disabled={conversation.length < 3 || loadingResetPoints}
-                  title="Refresh recommendations"
-                >
-                  <span role="img" aria-label="refresh">🔄</span>
-                </Button>
-                */}
-              </Card.Header>
-              <Card.Body>
-                {loadingResetPoints ? (
-                  <div className="text-center p-3">
-                    <Spinner animation="border" variant="primary" size="sm" />
-                    <p className="mt-2 small text-muted">Analyzing conversation...</p>
-                  </div>
-                ) : resetPoints.length > 0 ? (
-                  <Accordion defaultActiveKey="0" flush>
-                    {resetPoints.map((point, idx) => (
-                      <Accordion.Item eventKey={idx.toString()} key={idx}>
-                        <Accordion.Header>
-                          <small className={`${point.sender === 'Me' ? 'text-primary' : 'text-success'}`}>
-                            {idx + 1}. {point.messageText}
-                          </small>
-                        </Accordion.Header>
-                        <Accordion.Body>
-                          <p className="small text-muted">{point.reason}</p>
-                          <div className="d-grid gap-2">
-                            <Button 
-                              variant="outline-primary" 
-                              size="sm" 
-                              onClick={() => handleResetToPoint(point.index)}
-                            >
-                              Reset Here
-                            </Button>
-                          </div>
-                        </Accordion.Body>
-                      </Accordion.Item>
-                    ))}
-                  </Accordion>
-                ) : conversation.length >= 3 ? (
-                  <div className="text-center p-3">
-                    <p className="text-muted small">No specific reset points identified yet.</p>
-                    <Button 
-                      variant="outline-primary" 
-                      size="sm" 
-                      onClick={handleRefreshRecommendations}
-                      disabled={loadingResetPoints}
-                    >
-                      Try again
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="text-center p-3">
-                    <p className="text-muted small">Need at least 3 messages for reset point analysis.</p>
-                  </div>
-                )}
-              </Card.Body>
-            </Card>
-
-            {/* Recommendations for continuing the conversation */}
-            <Card className="mb-3">
+            <div className="left-panel-container">
+              <Card className="reset-points-card side-panel-card">
                 <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
-                    <strong>Recommendations for Continuing the Conversation</strong>
+                  <strong>3 Recommended Reset Points</strong>
                 </Card.Header>
-                <Card.Body>
-                    {duringRecommendations && duringRecommendations.length > 0 ? (
-                        <ul className="mb-0 ps-3 small">
-                            {duringRecommendations.map((tip, idx) => (
-                                <li key={idx} className="mb-2">
-                                    {tip && tip.includes(":") ? (
-                                        <>
-                                            <strong className="text-primary">{tip.split(":")[0].trim()}</strong>: {tip.split(":")[1].trim()}
-                                        </>
-                                    ) : tip}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p className="small text-muted">
-                            No recommendations available.
-                        </p>
-                    )}
+                <Card.Body className="reset-points-scrollable">
+                  {loadingResetPoints ? (
+                    <div className="text-center p-3">
+                      <Spinner animation="border" variant="primary" size="sm" />
+                      <p className="mt-2 small text-muted">Analyzing conversation...</p>
+                    </div>
+                  ) : resetPoints.length > 0 ? (
+                    <Accordion defaultActiveKey="0" flush>
+                      {resetPoints.map((point, idx) => (
+                        <Accordion.Item eventKey={idx.toString()} key={idx}>
+                          <Accordion.Header>
+                            <small className={`${point.sender === 'Me' ? 'text-primary' : 'text-success'}`}>
+                              {idx + 1}. {point.messageText}
+                            </small>
+                          </Accordion.Header>
+                          <Accordion.Body>
+                            <p className="small text-muted">{point.reason}</p>
+                            <div className="d-grid gap-2">
+                              <Button 
+                                variant="outline-primary" 
+                                size="sm" 
+                                onClick={() => handleResetToPoint(point.index)}
+                              >
+                                Reset Here
+                              </Button>
+                            </div>
+                          </Accordion.Body>
+                        </Accordion.Item>
+                      ))}
+                    </Accordion>
+                  ) : conversation.length >= 3 ? (
+                    <div className="text-center p-3">
+                      <p className="text-muted small">No specific reset points identified yet.</p>
+                      <Button 
+                        variant="outline-primary" 
+                        size="sm" 
+                        onClick={handleRefreshRecommendations}
+                        disabled={loadingResetPoints}
+                      >
+                        Try again
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center p-3">
+                      <p className="text-muted small">Need at least 3 messages for reset point analysis.</p>
+                    </div>
+                  )}
                 </Card.Body>
-            </Card>
+              </Card>
+
+              {/* Recommendations for continuing the conversation */}
+              <Card className="tips-card side-panel-card">
+                <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
+                  <strong>Communication Tips</strong>
+                </Card.Header>
+                <Card.Body className="tips-scrollable">
+                  {duringRecommendations && duringRecommendations.length > 0 ? (
+                    <ul className="mb-0 ps-3 small">
+                      {duringRecommendations.map((tip, idx) => (
+                        <li key={idx} className="mb-2">
+                          {tip && tip.includes(":") ? (
+                            <>
+                              <strong className="text-primary">{tip.split(":")[0].trim()}</strong>: {tip.split(":")[1].trim()}
+                            </>
+                          ) : tip}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="small text-muted">
+                      No recommendations available.
+                    </p>
+                  )}
+                </Card.Body>
+              </Card>
+            </div>
           </Col>
 
           {/* Chat Center */}
-          <Col md={6} style={{ borderTop: '1px solid #dee2e6', borderBottom: '1px solid #dee2e6' }}>
+          <Col md={6} className="chat-column">
             {/* Scenario display */}
             {/*
             <Card className="w-100 mb-3 border-primary border-top-0 border-end-0 border-bottom-0 border-3 mt-4" style={{ borderRadius: '0.75rem' }}>
@@ -776,166 +808,208 @@ function Real() {
             */}
             <div className="flex-grow-1 w-100 mb-3" style={{ minHeight: 400, maxHeight: 700, overflowY: 'auto' }}>
               {/* Chat with Reset Points */}
-              <ChatFeed
-                messages={conversation.map((msg, idx) => {
-                  const uniqueId = getParticipantId(msg.sender);
-                  
-                  // Check if this message is a reset point
-                  const isReset = isResetPoint(idx);
-                  let customMessage = msg.text;
-                  
-                  // For reset points, add a visual indicator to the message
-                  if (isReset) {
-                    const resetReason = getResetPointReason(idx);
-                    customMessage = (
-                      <>
-                        {msg.text}
-                        <span style={{ display: 'block', marginTop: '4px' }}>
-                          <OverlayTrigger
-                            placement="right"
-                            overlay={
-                              <Tooltip id={`reset-reason-${idx}`}>
-                                {resetReason}
-                              </Tooltip>
-                            }
-                          >
-                            <Button 
-                                size="sm" 
-                                variant="warning" 
-                                onClick={() => handleResetToPoint(idx)}
-                                style={{ 
-                                fontSize: '0.7em', 
-                                padding: '2px 6px', 
-                                marginLeft: '8px',
-                                fontWeight: 'bold'
-                                }}
-                            >
-                                Reset Here
-                            </Button>
-                          </OverlayTrigger>
-                        </span>
-                      </>
-                    );
-                  }
-                  
-                  return new Message({
-                    id: uniqueId,
-                    senderName: msg.sender,
-                    message: customMessage
-                  });
-                })}
-                isTyping={loadingResponses}
-                hasInputField={false}
-                showSenderName
-                bubbleStyles={{
-                  text: {
-                    fontSize: '1rem',
-                  },
-                  chatbubble: {
-                    borderRadius: 10,
-                    padding: 10
-                  }
-                }}
-              />
+              <div className="chat-feed-container">
+                <ChatFeed
+                  messages={conversation.map((msg, idx) => {
+                    const uniqueId = getParticipantId(msg.sender);
+                    
+                    // Check if this message is a reset point
+                    const isReset = isResetPoint(idx);
+                    let customMessage = msg.text;
+                    
+                    // Add Reset Here button to all "Me" messages
+                    if (msg.sender === "Me") {
+                      customMessage = (
+                        <div className={`message-box-wrapper ${isReset ? "reset-point-container" : ""}`} style={{ position: 'relative', overflow: 'visible'}}>
+                            {/* 메시지 내용 */}
+                            {msg.text}
+
+                            {/* 버튼 */}
+                            <span style={{ display: 'block', marginTop: '4px', textAlign: 'right' }}>
+                            {isReset ? (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                  <Button 
+                                      size="sm" 
+                                      variant="warning" 
+                                      onClick={() => handleResetToPoint(idx)}
+                                      style={{ 
+                                          fontSize: '0.7em', 
+                                          padding: '2px 6px',
+                                          fontWeight: 'bold'
+                                      }}
+                                  >
+                                      Reset From Here
+                                  </Button>
+                                  <OverlayTrigger
+                                  placement="right"
+                                  overlay={
+                                      <Tooltip id={`reset-reason-${idx}`}>
+                                      {getResetPointReason(idx)}
+                                      </Tooltip>
+                                  }
+                                  >
+                                      <FaSyncAlt
+                                      style={{
+                                      marginLeft: '5px',
+                                      backgroundColor: '#ffc107', 
+                                      color: 'white',
+                                      borderRadius: '50%',
+                                      padding: '4px',
+                                      fontSize: '20px',
+                                      zIndex: 10
+                                      }}
+                                      />
+                                  </OverlayTrigger>
+                                </div>
+                            ) : (
+                              <Button 
+                                  size="sm" 
+                                  variant="warning" 
+                                  onClick={() => handleResetToPoint(idx)}
+                                  style={{ 
+                                    fontSize: '0.7em', 
+                                    padding: '2px 6px',
+                                    fontWeight: 'normal'
+                                  }}
+                              >
+                                  Reset From Here
+                              </Button>
+                            )}
+                            </span>
+                        </div>
+                      );
+                    }
+                    
+                    return new Message({
+                      id: uniqueId,
+                      senderName: msg.sender,
+                      message: customMessage,
+                      data: { isResetPoint: isReset && msg.sender === "Me" }
+                    });
+                  })}
+                  isTyping={loadingResponses}
+                  hasInputField={false}
+                  showSenderName
+                  bubbleStyles={{
+                    text: {
+                      fontSize: '1rem',
+                    },
+                    chatbubble: {
+                      borderRadius: 10,
+                      padding: 10,
+                      marginTop: 0,
+                      marginBottom: 2
+                    }
+                  }}
+                />
+              </div>
             </div>
             
-            <div className="d-flex w-100 align-items-center mb-4">
-              <Highlight
-                inputValue={inputValue}
-                setInputValue={setInputValue}
-                onSend={handleSendMessage}
-                apiKey={process.env.REACT_APP_OPENAI_API_KEY}
-                disabled={loadingResponses}
-              />
-            </div>
-            
-            {/* Bottom buttons */}
-            <div className="d-flex justify-content-center mt-2 mb-2">
-              <Button 
-                variant="outline-success" 
-                style={{ borderRadius: '.25rem', padding: '0.375rem 1.5rem' }}
-                onClick={handleFinishConversation}
-                disabled={loadingResponses}
-              >
-                Finish Conversation
-              </Button>
+            {/* 입력 영역 */}
+            <div className="chat-input-area">
+              <div className="d-flex w-100 align-items-center">
+                <Highlight
+                  inputValue={inputValue}
+                  setInputValue={setInputValue}
+                  onSend={handleSendMessage}
+                  apiKey={process.env.REACT_APP_OPENAI_API_KEY}
+                  disabled={loadingResponses}
+                />
+              </div>
+              
+              {/* Bottom buttons */}
+              <div className="d-flex justify-content-center mt-2">
+                <Button 
+                  variant="outline-success" 
+                  style={{ borderRadius: '.25rem', padding: '0.375rem 1.5rem' }}
+                  onClick={handleFinishConversation}
+                  disabled={loadingResponses}
+                >
+                  Finish Conversation
+                </Button>
+              </div>
             </div>
           </Col>
 
           {/* Right Sidebar */}
           <Col md={3}>
-            {/* Practice Chat History Section */}
-            <Card className="mb-3 practice-chat-card">
-              <Card.Header className="bg-primary text-white d-flex align-items-center">
-                <strong>Your Practice Conversation</strong>
-                <div className="tooltip-container ms-2" onClick={(e) => e.stopPropagation()}>
-                  <FaInfoCircle className="text-white" style={{ fontSize: '1.25rem' }} />
-                  <div className="black-tooltip info-tooltip" style={{ top: '35px', right: '-15px', left: 'auto', transform: 'none', width: '280px' }}>
-                    Highlighted messages may be relevant to your current conversation. As you chat, we'll identify messages from your practice that could be helpful now.
-                  </div>
-                </div>
-              </Card.Header>
-              <Card.Body 
-                className="p-2 practice-chat-body"
-                ref={practiceChatRef}
-              >
-                {/* Full Practice Chat History with highlighted relevant messages */}
-                {practiceChat.length > 0 ? (
-                  <div className="p-2">
-                    <div className="chat-container py-2">
-                      {practiceChat.map((msg, idx) => {
-                        // Check if this message is relevant (only for "Me" messages)
-                        const isRelevant = msg.sender === "Me" && 
-                          relevantPracticeMessages.some(relevantMsg => 
-                            relevantMsg.text === msg.text && 
-                            relevantMsg.timestamp === msg.timestamp
-                          );
-                        
-                        return (
-                          <div 
-                            key={idx}
-                            className={`d-flex mb-3 ${msg.sender === 'Me' ? 'justify-content-end' : 'justify-content-start'}`}
-                            ref={el => {
-                              if (isRelevant) {
-                                highlightedMessagesRefs.current[idx] = el;
-                              }
-                            }}
-                          >
+            <div className="panel-container">
+              {/* Practice Chat History Section */}
+              <Card className="mb-3 side-panel-card" style={{ height: "calc(100vh)", overflowY: "auto" }}>
+                <Card.Header className="bg-primary text-white d-flex align-items-center" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                  <strong>Original Conversation</strong>
+                  <OverlayTrigger
+                    placement="bottom"
+                    overlay={
+                      <Tooltip id="conversation-info-tooltip" style={{ maxWidth: '300px' }}>
+                        Highlighted messages may be relevant to your current conversation. As you chat, we'll identify messages from your practice that could be helpful now.
+                      </Tooltip>
+                    }
+                  >
+                    <div className="ms-2">
+                      <FaInfoCircle className="text-white" style={{ fontSize: '0.9rem', cursor: 'pointer' }} />
+                    </div>
+                  </OverlayTrigger>
+                </Card.Header>
+                <Card.Body className="p-1" ref={practiceChatRef} style={{ overflow: "auto", maxHeight: "calc(100vh - 60px)" }}>
+                  {/* Full Practice Chat History with highlighted relevant messages */}
+                  {practiceChat.length > 0 ? (
+                    <div className="p-1">
+                      <div className="chat-container py-1">
+                        {practiceChat.map((msg, idx) => {
+                          // Check if this message is relevant (only for "Me" messages)
+                          const isRelevant = msg.sender === "Me" && 
+                            relevantPracticeMessages.some(relevantMsg => 
+                              relevantMsg.text === msg.text && 
+                              relevantMsg.timestamp === msg.timestamp
+                            );
+                          
+                          return (
                             <div 
-                              className={`message-bubble p-2 px-3 rounded-3 ${
-                                msg.sender === 'Me' 
-                                  ? 'bg-primary bg-opacity-10 text-primary' 
-                                  : 'bg-success bg-opacity-10 text-success'
-                              } ${isRelevant ? 'relevant-highlight relevant-message' : ''}`}
-                              style={{maxWidth: '85%'}}
+                              key={idx}
+                              className={`d-flex mb-3 ${msg.sender === 'Me' ? 'justify-content-end' : 'justify-content-start'}`}
+                              ref={el => {
+                                if (isRelevant) {
+                                  highlightedMessagesRefs.current[idx] = el;
+                                }
+                              }}
                             >
-                              {isRelevant && (
-                                <div className="lightbulb-icon">
-                                  <FaLightbulb />
+                              <div 
+                                className={`message-bubble p-2 px-3 rounded-3 ${
+                                  msg.sender === 'Me' 
+                                    ? 'bg-primary bg-opacity-10 text-primary' 
+                                    : 'bg-success bg-opacity-10 text-success'
+                                } ${isRelevant ? 'relevant-highlight relevant-message' : ''}`}
+                                style={{maxWidth: '85%'}}
+                              >
+                                {isRelevant && (
+                                  <div className="lightbulb-icon">
+                                    <FaLightbulb />
+                                  </div>
+                                )}
+                                <div className="small fw-bold mb-1">
+                                  {msg.sender}
                                 </div>
-                              )}
-                              <div className="small fw-bold mb-1">
-                                {msg.sender}
-                              </div>
-                              <div className="message-text">
-                                {msg.text}
-                              </div>
-                              <div className="message-time text-muted">
-                                {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                <div className="message-text">
+                                  {msg.text}
+                                </div>
+                                <div className="message-time text-muted">
+                                  {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="p-3 text-center text-muted">
-                    <small>No practice chat history available</small>
-                  </div>
-                )}
-              </Card.Body>
-            </Card>
+                  ) : (
+                    <div className="p-3 text-center text-muted">
+                      <small>No practice chat history available</small>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </div>
           </Col>
         </Row>
       </Container>

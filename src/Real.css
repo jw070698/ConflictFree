@@ -132,7 +132,6 @@
   text-align: left;
   opacity: 0;
   transition: opacity 0.2s ease, visibility 0.2s ease;
-  pointer-events: none;
 }
 
 .relevant-message:hover .black-tooltip {
@@ -159,12 +158,28 @@
 }
 
 .tooltip-container:hover .black-tooltip {
-  visibility: visible;
-  opacity: 1;
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1100;
 }
 
 /* Info tooltip arrow position */
 .info-tooltip::before {
-  right: 20px;
-  left: auto;
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: auto;
+  left: 140px;
+  transform: translateX(-50%);
+  border-width: 0 8px 8px 8px;
+  border-style: solid;
+  border-color: transparent transparent rgba(0, 0, 0, 0.85) transparent;
+}
+
+/* Ensure tooltip is always on top and visible */
+.tooltip-container:hover .info-tooltip {
+  visibility: visible !important;
+  opacity: 1 !important;
+  z-index: 1100;
+  pointer-events: auto;
 } 
