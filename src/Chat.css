@@ -1,0 +1,18 @@
+/* Custom styles for Chat component */
+
+/* Make the feedback modal wider */
+.wider-modal {
+  max-width: 800px;
+  width: 90%;
+}
+
+/* Additional styling for feedback content */
+.feedback-section p {
+  line-height: 1.6;
+}
+
+/* Pattern insights styling */
+.pattern-insight {
+  padding-left: 12px;
+  margin-bottom: 16px;
+}

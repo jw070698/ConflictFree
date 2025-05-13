@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Form, Button, Container, Row, Col, ProgressBar, Card, Alert, Accordion, Modal, Spinner } from 'react-bootstrap';
+import { Form, Button, Container, Row, Col, ProgressBar, Card, Alert, Accordion, Modal, Spinner, Dropdown, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { getFirestore, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import app from "./firebase";
 import { ChatFeed, Message } from 'react-chat-ui';
 import { normalizeOpenAiResults, processAllPersonalityAnalyses } from './Analysis';
+import { FaInfoCircle, FaLightbulb, FaSyncAlt, FaCheck, FaTimes } from 'react-icons/fa';
+import './Chat.css'; // Import custom CSS file
 
 const db = getFirestore(app);
 
@@ -29,6 +31,42 @@ function Chat() {
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [feedbackContent, setFeedbackContent] = useState('');
     const [generatingConversation, setGeneratingConversation] = useState(false);
+    
+    // Annotation 관련 상태
+    const [messageAnnotations, setMessageAnnotations] = useState({});
+    const [annotationResults, setAnnotationResults] = useState({});
+    const [evaluatingAnnotation, setEvaluatingAnnotation] = useState(false);
+    const [annotationAttempts, setAnnotationAttempts] = useState({});
+    
+    // Annotation 옵션과 설명
+    const annotationOptions = [
+      "Criticism",
+      "Contempt",
+      "Defensiveness",
+      "Guilt-tripping",
+      "Gaslighting",
+      "Invalidation",
+      "Avoidant",
+      "Deflecting",
+      "Vague",
+      "Interrupting",
+      "None"
+    ];
+    
+    // Annotation 설명
+    const annotationDescriptions = {
+      "Criticism": "Attacking someone's character instead of their behavior",
+      "Contempt": "Disrespect, mockery, sarcasm, name-calling",
+      "Defensiveness": "Seeing self as victim, warding off perceived attack",
+      "Guilt-tripping": "Making someone feel guilty to control them",
+      "Gaslighting": "Making someone doubt their reality or perceptions",
+      "Invalidation": "Dismissing or rejecting someone's feelings",
+      "Avoidant": "Withdrawing from conflict, stonewalling",
+      "Deflecting": "Changing the topic to avoid addressing issues",
+      "Vague": "Being unclear, not expressing needs directly",
+      "Interrupting": "Cutting off or talking over someone",
+      "None": "No negative communication pattern present"
+    };
     
     // 음주 관련 시나리오
     const [conflictScenario, setConflictScenario] = useState('');
@@ -218,25 +256,68 @@ function Chat() {
         setLoadingResponses(true);
         
         try {
+          // 전체 annotation 통계 계산
+          const totalMessages = conversation.length;
+          const annotatedMessages = Object.keys(messageAnnotations).length;
+          const correctAnnotations = Object.values(annotationResults).filter(result => result.isCorrect).length;
+          
+          // 평균 시도 횟수 계산 (맞춘 것들에 대해서만)
+          let totalAttempts = 0;
+          let correctWithAttempts = 0;
+          
+          Object.keys(annotationResults).forEach(messageIndex => {
+            if (annotationResults[messageIndex].isCorrect) {
+              totalAttempts += annotationAttempts[messageIndex] || 0;
+              correctWithAttempts++;
+            }
+          });
+          
+          const averageAttemptsUntilCorrect = correctWithAttempts > 0 
+            ? totalAttempts / correctWithAttempts 
+            : 0;
+          
+          // 사용자(Me)의 정확하게 식별된 메시지 패턴 수집
+          const myCorrectPatterns = [];
+          conversation.forEach((msg, index) => {
+            if (
+              msg.sender === "Me" && 
+              messageAnnotations[index] && 
+              annotationResults[index]?.isCorrect
+            ) {
+              myCorrectPatterns.push({
+                text: msg.text,
+                pattern: messageAnnotations[index]
+              });
+            }
+          });
+          
           // Save practice completion status to Firebase
           if (userDocId) {
             await updateDoc(doc(db, "users", userDocId), {
               practiceCompleted: true,
               practiceEndTime: serverTimestamp(),
               messageCount: conversation.length,
+              annotationSummary: {
+                totalMessages,
+                annotatedMessages,
+                correctAnnotations,
+                averageAttemptsUntilCorrect,
+                completedAt: serverTimestamp()
+              },
+              myCorrectPatterns: myCorrectPatterns,
               updatedAt: serverTimestamp()
             });
             
-            // Get conversation feedback from OpenAI
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
+            // Get conversation feedback from OpenAI with personalized advice
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+              },
+              body: JSON.stringify({
                 model: 'gpt-4o',
-            messages: [
+                messages: [
                   { 
                     role: 'system', 
                     content: `You are a relationship therapist analyzing a practice conversation between partners.` 
@@ -249,10 +330,14 @@ function Chat() {
                     Conversation:
                     ${conversation.map(msg => `${msg.sender}: ${msg.text}`).join("\n")}
                     
-                    Provide feedback on this practice conversation. Include:
-                    1. A positive comment on what went well (2-3 sentences)
+                    The user (Me) correctly identified these communication patterns in their own messages:
+                    ${myCorrectPatterns.map(p => `- "${p.text}" - Pattern: ${p.pattern}`).join("\n")}
+                    
+                    Provide feedback that includes:
+                    1. A positive comment on what went well (1-2 sentences)
                     2. One suggestion for improvement (1-2 sentences)
-                    3. A brief note of encouragement`
+                    3. Personalized communication advice based on the patterns the user correctly identified in their own messages (2-3 sentences)
+                    4. A brief note of encouragement`
                   }
                 ],
                 temperature: 0.7
@@ -276,7 +361,7 @@ function Chat() {
         }
         
         setLoadingResponses(false);
-        }
+      }
     };
 
     // Handle when user moves to real conversation
@@ -297,6 +382,137 @@ function Chat() {
       
       // Navigate to the Real component with the userDocId
       navigate(`/real?userDocId=${userDocId}`);
+    };
+
+    // Annotation 관련 함수들
+    const handleAnnotationSelect = async (messageIndex, annotation) => {
+      // 시도 횟수 증가
+      const currentAttempts = annotationAttempts[messageIndex] || 0;
+      const updatedAttempts = {
+        ...annotationAttempts,
+        [messageIndex]: currentAttempts + 1
+      };
+      setAnnotationAttempts(updatedAttempts);
+      
+      // 선택한 annotation 저장
+      const updatedAnnotations = {
+        ...messageAnnotations,
+        [messageIndex]: annotation
+      };
+      setMessageAnnotations(updatedAnnotations);
+      
+      // OpenAI로 annotation 평가 요청
+      await evaluateAnnotation(messageIndex, annotation, currentAttempts + 1);
+    };
+    
+    const evaluateAnnotation = async (messageIndex, selectedAnnotation, attempts) => {
+      const message = conversation[messageIndex];
+      if (!message) return;
+      
+      setEvaluatingAnnotation(true);
+      
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: [
+              { 
+                role: 'system', 
+                content: `You are an expert in communication patterns and conflict analysis. You'll analyze if the user's annotation of a message in a conversation is appropriate.
+                
+                Here are descriptions of different communication patterns:
+                - Criticism: Attacking someone's character, not their behavior
+                - Contempt: Disrespect, mockery, sarcasm, name-calling
+                - Defensiveness: Seeing self as victim, warding off perceived attack
+                - Guilt-tripping: Making someone feel guilty to control them
+                - Gaslighting: Making someone doubt their reality/perceptions
+                - Invalidation: Dismissing or rejecting someone's feelings
+                - Avoidant: Withdrawing from conflict, stonewalling
+                - Deflecting: Changing topic to avoid addressing issues
+                - Vague: Being unclear, not expressing needs directly
+                - Interrupting: Cutting off or talking over someone
+                - None: No negative pattern present
+                
+                You'll analyze if the selected label matches the message's actual communication pattern.` 
+              },
+              { 
+                role: 'user', 
+                content: `Here's a message from a conversation:
+                
+                Speaker: ${message.sender}
+                Message: "${message.text}"
+                
+                The user selected this annotation: "${selectedAnnotation}"
+                
+                Please determine if this annotation is correct for this message.
+                
+                Respond with only one of these options:
+                CORRECT: If it's the best or a reasonable annotation for this message.
+                INCORRECT: If it's clearly not appropriate for this message.
+                
+                Then add a one-sentence explanation.` 
+              }
+            ],
+            temperature: 0.3
+          })
+        });
+        
+        const data = await response.json();
+        const resultText = data.choices[0].message.content.trim();
+        
+        // Parse response
+        const isCorrect = resultText.startsWith('CORRECT');
+        const explanation = resultText.split('\n')[1] || '';
+        
+        // Save result
+        setAnnotationResults({
+          ...annotationResults,
+          [messageIndex]: {
+            isCorrect,
+            explanation
+          }
+        });
+        
+        // Save to Firebase if needed
+        if (userDocId) {
+          try {
+            await updateDoc(doc(db, "users", userDocId), {
+              [`messageAnnotations.${messageIndex}`]: {
+                messageText: message.text,
+                sender: message.sender,
+                selectedAnnotation,
+                isCorrect,
+                explanation,
+                attempts: attempts,
+                timestamp: serverTimestamp()
+              },
+              updatedAt: serverTimestamp()
+            });
+            
+            // 올바른 annotation을 맞췄을 때 총 시도 횟수 저장
+            if (isCorrect) {
+              await updateDoc(doc(db, "users", userDocId), {
+                [`annotationStats.${messageIndex}`]: {
+                  attemptsUntilCorrect: attempts,
+                  timestamp: serverTimestamp()
+                },
+                updatedAt: serverTimestamp()
+              });
+            }
+          } catch (error) {
+            console.error("Error saving annotation to Firebase:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Error evaluating annotation:", error);
+      } finally {
+        setEvaluatingAnnotation(false);
+      }
     };
 
     // 자동 대화 생성 - 단일 useEffect로 통합
@@ -446,6 +662,21 @@ function Chat() {
     // Layout
   return (
       <Container fluid className="py-4 mb-5" style={{ minHeight: '100vh' }}>
+        <div className="text-center mb-1">
+          <h4>Let's Practice!</h4>
+          <div className="scenario-container mx-auto py-2 px-3 my-1 border-start border-3 border-primary rounded-end bg-light bg-opacity-50" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem' }}>
+            <span className="text-primary fw-bold me-1">New Scenario:</span>
+            <span style={{ lineHeight: '1.4' }}>{conflictScenario}</span>
+          </div>
+          <div className="mx-auto py-3 px-4 mt-2 mb-3 rounded-3 shadow-sm" style={{ maxWidth: '90%', textAlign: 'left', fontSize: '0.9rem', lineHeight: '1.5', backgroundColor: '#fff3cd', color: 'black' }}>
+            <div className="d-flex align-items-start">
+              <FaInfoCircle className="me-2 mt-1" />
+              <div>
+                <strong>Instructions:</strong> This conversation is automatically generated based on you and your partner's conflict types and communication patterns. Please select the communication pattern for each message from the dropdown menu. The system will evaluate your annotation and show if it's <span style={{ color: '#28a745' }}>correct</span> or <span style={{ color: '#dc3545' }}>incorrect</span> with visual indicators.
+              </div>
+            </div>
+          </div>
+        </div>
         <Row className="flex-grow-1" style={{ height: 'calc(100vh - 150px)' }}>
           {/* Partner Sidebar */}
           <Col md={3} className="d-flex flex-column border-end px-3" style={{ overflowY: 'auto', height: '100%' }}>
@@ -453,8 +684,8 @@ function Chat() {
               <Card.Body>
                 <Card.Title><span role="img" aria-label="partner">👤</span> {partnerName}</Card.Title>
                 {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
-                  <div className="mt-2 mb-3">
-                    <small className="text-muted">{partnerName}'s conflict type:</small>
+                  <div className="mt-2 mb-1 d-flex align-items-center">
+                    <small className="text-muted me-2">{partnerName}'s conflict type:</small>
                     <h6 className="mb-0">{gottmanAnalysis.people[partnerName].primaryType}</h6>
                   </div>
                 )}
@@ -474,8 +705,8 @@ function Chat() {
               <Card.Body>
                 <Card.Title><span role="img" aria-label="me">👤</span> Me</Card.Title>
                 {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people['Me'] && (
-                  <div className="mt-2 mb-3">
-                    <small className="text-muted">Your conflict type:</small>
+                  <div className="mt-2 mb-1 d-flex align-items-center">
+                    <small className="text-muted me-2">Your conflict type:</small>
                     <h6 className="mb-0">{gottmanAnalysis.people['Me'].primaryType}</h6>
                   </div>
                 )}
@@ -568,20 +799,6 @@ function Chat() {
               </Alert>
             )}
             */}
-            {/* 대화 관련 팁 표시 */}
-            {recommendations && recommendations.whenItHappens && recommendations.whenItHappens.length > 0 && (
-              <Card className="w-100 mb-2 mt-2" style={{ borderRadius: '0.75rem', border: 'none' }}>
-                <Card.Body className="py-1">
-                  <div className="scenario-container mx-auto py-1 px-3 my-0 border-start border-3 border-primary rounded-end bg-light bg-opacity-50" style={{ maxWidth: '90%', textAlign: 'right', fontSize: '0.9rem' }}>
-                    <div>
-                    <span className="text-primary fw-bold me-1">New Scenario:</span>
-                      
-                      <p className="mb-0 mt-0 px-2 text-right">{conflictScenario}</p>
-                    </div>
-                  </div>
-                </Card.Body>
-              </Card>
-            )}
             
             <div className="flex-grow-1 w-100 mb-3" style={{ minHeight: 400, maxHeight: 700, overflowY: 'auto' }}>
             {loadingResponses && conversation.length === 0 && (
@@ -591,19 +808,115 @@ function Chat() {
               </div>
             )}
             
-        <ChatFeed
-          messages={conversation.map(msg => {
-            const uniqueId = getParticipantId(msg.sender);
-            return new Message({
-              id: uniqueId,
-              senderName: msg.sender,
-              message: msg.text
-            });
-          })}
-              isTyping={loadingResponses && conversation.length > 0}
-          hasInputField={false}
-          showSenderName
-        />
+            {evaluatingAnnotation && (
+              <div className="position-absolute" style={{ 
+                top: '50%', 
+                left: '50%', 
+                transform: 'translate(-50%, -50%)',
+                zIndex: 999,
+                backgroundColor: 'rgba(255,255,255,0.8)',
+                padding: '20px',
+                borderRadius: '10px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                textAlign: 'center'
+              }}>
+                <Spinner animation="border" variant="primary" />
+                <p className="mt-2 mb-0">Evaluating annotation...</p>
+              </div>
+            )}
+            
+            {/* Custom Chat Feed with Annotations */}
+            <div className="custom-chat-container">
+              {conversation.map((msg, index) => {
+                const isUserMessage = msg.sender === "Me";
+                const selectedAnnotation = messageAnnotations[index];
+                const annotationResult = annotationResults[index];
+                
+                // 결과에 따른 테두리 색상 설정
+                let borderColor = "transparent";
+                if (annotationResult) {
+                  borderColor = annotationResult.isCorrect ? "#28a745" : "#dc3545"; // 초록 또는 빨간색
+                }
+                
+                return (
+                  <div 
+                    key={index} 
+                    className={`d-flex mb-3 ${isUserMessage ? 'justify-content-end' : 'justify-content-start'}`}
+                  >
+                    <div 
+                      className={`message-container p-3 rounded-3 ${
+                        isUserMessage 
+                          ? 'bg-primary bg-opacity-10' 
+                          : 'bg-success bg-opacity-10'
+                      }`}
+                      style={{
+                        maxWidth: '80%',
+                        position: 'relative',
+                        border: selectedAnnotation ? `2px solid ${borderColor}` : 'none'
+                      }}
+                    >
+                      <div className="sender-name fw-bold mb-1" style={{ 
+                        color: isUserMessage ? '#0d6efd' : '#198754'
+                      }}>
+                        {msg.sender}
+                      </div>
+                      
+                      <div className="message-text">{msg.text}</div>
+                      
+                      <div className="mt-2 d-flex justify-content-between align-items-center">
+                        <div className="message-time text-muted small">
+                          {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </div>
+                        
+                        <div className="d-flex align-items-center">
+                          {annotationResult && (
+                            <div 
+                              className="me-2"
+                              title={annotationResult.explanation}
+                            >
+                              {annotationResult.isCorrect ? (
+                                <FaCheck style={{ color: "#28a745" }} />
+                              ) : (
+                                <FaTimes style={{ color: "#dc3545" }} />
+                              )}
+                            </div>
+                          )}
+                          
+                        <Dropdown>
+                              <Dropdown.Toggle 
+                                variant={selectedAnnotation ? (annotationResult?.isCorrect ? "success" : "danger") : "light"} 
+                                size="sm"
+                                disabled={evaluatingAnnotation}
+                              >
+                                {selectedAnnotation || "Choose"}
+                              </Dropdown.Toggle>
+                              <Dropdown.Menu>
+                                {annotationOptions.map((option) => (
+                                  <OverlayTrigger
+                                    key={option}
+                                    placement="left"
+                                    overlay={
+                                      <Tooltip id={`tooltip-option-${option}`}>
+                                        {annotationDescriptions[option]}
+                                      </Tooltip>
+                                    }
+                                  >
+                                    <Dropdown.Item 
+                                      onClick={() => handleAnnotationSelect(index, option)}
+                                    >
+                                      {option}
+                                    </Dropdown.Item>
+                                  </OverlayTrigger>
+                                ))}
+                              </Dropdown.Menu>
+                            </Dropdown>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
       </div>
             {/* Tips */}
             {tip && (
@@ -640,21 +953,58 @@ function Chat() {
           show={showFeedbackModal} 
           onHide={() => setShowFeedbackModal(false)}
           centered
+          size="lg"
+          dialogClassName="wider-modal"
         >
           <Modal.Header closeButton>
             <Modal.Title>Practice Completed</Modal.Title>
           </Modal.Header>
           <Modal.Body>
-            <div className="mb-4">
+            <div className="mb-3 feedback-section">
               <h5 className="mb-2">Feedback:</h5>
-              {feedbackContent.split('\n').map((paragraph, idx) => (
-                <p key={idx}>{paragraph}</p>
-              ))}
+              {feedbackContent.split('\n').map((paragraph, idx) => {
+                // Parse Markdown-style bold formatting (**text**)
+                const parsedText = paragraph.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                return (
+                  <p key={idx} dangerouslySetInnerHTML={{ __html: parsedText }}></p>
+                );
+              })}
+            </div>
+            
+            <div className="p-3 mb-3 bg-light rounded">
+              <h5>Your Communication Patterns:</h5>              
+              
+              {/* Display user's correctly identified patterns - only unique patterns */}
+              {(() => {
+                // Get unique patterns that were correctly identified
+                const uniquePatterns = {};
+                
+                conversation.forEach((msg, index) => {
+                  if (
+                    msg.sender === "Me" && 
+                    messageAnnotations[index] && 
+                    annotationResults[index]?.isCorrect
+                  ) {
+                    const pattern = messageAnnotations[index];
+                    uniquePatterns[pattern] = true;
+                  }
+                });
+                
+                // Render each unique pattern once
+                return Object.keys(uniquePatterns).map((pattern, idx) => (
+                  <div key={`unique-pattern-${idx}`} className="mb-2">
+                    <p className="mb-1">
+                      Pattern identified: <span className="text-danger">{pattern}</span>
+                    </p>
+                  </div>
+
+                ));
+              })()}
             </div>
             
             <div className="text-center">
               <p className="text-success">Now you're ready for the real conversation!</p>
-    </div>
+            </div>
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowFeedbackModal(false)}>
