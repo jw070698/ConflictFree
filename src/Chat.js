@@ -360,8 +360,8 @@ function Chat() {
           setShowFeedbackModal(true);
         }
         
-        setLoadingResponses(false);
-      }
+      setLoadingResponses(false);
+    }
     };
 
     // Handle when user moves to real conversation
@@ -413,12 +413,12 @@ function Chat() {
       
       try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
+        method: 'POST',
+        headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
+        },
+        body: JSON.stringify({
             model: 'gpt-4o',
             messages: [
               { 
@@ -459,7 +459,7 @@ function Chat() {
               }
             ],
             temperature: 0.3
-          })
+        })
         });
         
         const data = await response.json();
@@ -655,7 +655,7 @@ function Chat() {
         setLoadingResponses(false);
         }
       }
-      
+
       generateFullConversation();
     }, [userDocId, userData, partnerName, scenario, gottmanAnalysis, resetTrigger, conversation.length]);
 
@@ -678,49 +678,40 @@ function Chat() {
           </div>
         </div>
         <Row className="flex-grow-1" style={{ height: 'calc(100vh - 150px)' }}>
-          {/* Partner Sidebar */}
+          {/* Sidebar Row with Partner and Me cards side by side */}
           <Col md={3} className="d-flex flex-column border-end px-3" style={{ overflowY: 'auto', height: '100%' }}>
-            <Card className="w-100 mb-3">
-              <Card.Body>
-                <Card.Title><span role="img" aria-label="partner">👤</span> {partnerName}</Card.Title>
-                {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
-                  <div className="mt-2 mb-1 d-flex align-items-center">
-                    <small className="text-muted me-2">{partnerName}'s conflict type:</small>
-                    <h6 className="mb-0">{gottmanAnalysis.people[partnerName].primaryType}</h6>
-                  </div>
-                )}
-                {/* 갓트만 분석 결과 표시 */}
-                {/*
-                {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
-                  <Alert variant="light" className="p-2 mb-3">
-                    <small className="d-block mb-1 text-muted">Their pattern:</small>
-                    <p className="small mb-0">{gottmanAnalysis.people[partnerName]?.negativePatterns || "Not available"}</p>
-                  </Alert>
-                )}
-                */}
-              </Card.Body>
-            </Card>
-            {/* Me Sidebar */}
-            <Card className="w-100 mb-3">
-              <Card.Body>
-                <Card.Title><span role="img" aria-label="me">👤</span> Me</Card.Title>
-                {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people['Me'] && (
-                  <div className="mt-2 mb-1 d-flex align-items-center">
-                    <small className="text-muted me-2">Your conflict type:</small>
-                    <h6 className="mb-0">{gottmanAnalysis.people['Me'].primaryType}</h6>
-                  </div>
-                )}
-                {/* 갓트만 분석 결과 표시 */}
-                {/*
-                {gottmanAnalysis && gottmanAnalysis.people && (
-                  <Alert variant="light" className="p-2 mb-3">
-                    <small className="d-block mb-1 text-muted">Your pattern:</small>
-                    <p className="small mb-0">{gottmanAnalysis.people['Me']?.negativePatterns || "Not available"}</p>
-                  </Alert>
-                )}
-                */}
-              </Card.Body>
-            </Card>
+            <Row className="mb-3">
+              {/* Partner Card */}
+              <Col md={6} className="pe-1">
+                <Card className="w-100 h-100">
+                  <Card.Body>
+                    <Card.Title><span role="img" aria-label="partner">👤</span> {partnerName}</Card.Title>
+                    {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people[partnerName] && (
+                      <div className="mt-2 mb-1">
+                        <small className="text-muted me-2">{partnerName}'s conflict type:</small>
+                        <h6 className="mb-0">{gottmanAnalysis.people[partnerName].primaryType}</h6>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+              
+              {/* Me Card */}
+              <Col md={6} className="ps-1">
+                <Card className="w-100 h-100">
+                  <Card.Body>
+                    <Card.Title><span role="img" aria-label="me">👤</span> Me</Card.Title>
+                    {gottmanAnalysis && gottmanAnalysis.people && gottmanAnalysis.people['Me'] && (
+                      <div className="mt-2 mb-1">
+                        <small className="text-muted me-2">Your conflict type:</small>
+                        <h6 className="mb-0">{gottmanAnalysis.people['Me'].primaryType}</h6>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+            
             {/* 추천 정보 표시 */}
             {recommendations && (
               <Card className="w-100 mb-3">
@@ -1004,7 +995,7 @@ function Chat() {
             
             <div className="text-center">
               <p className="text-success">Now you're ready for the real conversation!</p>
-            </div>
+    </div>
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowFeedbackModal(false)}>
